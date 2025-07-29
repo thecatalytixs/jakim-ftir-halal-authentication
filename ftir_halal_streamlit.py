@@ -40,7 +40,16 @@ pca = PCA(n_components=2)
 pca_scores = pca.fit_transform(X_scaled)
 pca_df = pd.DataFrame(data=pca_scores, columns=["PC1", "PC2"])
 pca_df["Class"] = y.values
-fig = px.scatter(pca_df, x="PC1", y="PC2", color="Class", title="PCA Score Plot")
+pca_df["SampleID"] = df["SampleID"].values
+
+# Option to toggle SampleID labels
+show_labels = st.checkbox("Show SampleID labels on PCA plot")
+if show_labels:
+    fig = px.scatter(pca_df, x="PC1", y="PC2", color="Class", text="SampleID", title="PCA Score Plot")
+    fig.update_traces(textposition='top center')
+else:
+    fig = px.scatter(pca_df, x="PC1", y="PC2", color="Class", title="PCA Score Plot")
+
 st.plotly_chart(fig, use_container_width=True)
 
 # PCA Loadings (Variable Plot)
@@ -59,7 +68,9 @@ fig_biplot = go.Figure()
 # Add score plot
 for label in pca_df["Class"].unique():
     filtered = pca_df[pca_df["Class"] == label]
-    fig_biplot.add_trace(go.Scatter(x=filtered["PC1"], y=filtered["PC2"], mode='markers', name=label))
+    fig_biplot.add_trace(go.Scatter(x=filtered["PC1"], y=filtered["PC2"], mode='markers+text' if show_labels else 'markers',
+                                    name=label, text=filtered["SampleID"] if show_labels else None,
+                                    textposition="top center" if show_labels else None))
 
 # Add loading vectors
 for i in range(loadings.shape[0]):
