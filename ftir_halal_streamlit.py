@@ -52,8 +52,27 @@ fig_loadings.add_trace(go.Scatter(x=loadings["PC1"], y=loadings["PC2"], mode='ma
 fig_loadings.update_layout(title="PCA Variable Plot (Loadings)", xaxis_title="PC1", yaxis_title="PC2")
 st.plotly_chart(fig_loadings, use_container_width=True)
 
+# PCA Biplot
+st.subheader("4. PCA Biplot")
+fig_biplot = go.Figure()
+
+# Add score plot
+for label in pca_df["Class"].unique():
+    filtered = pca_df[pca_df["Class"] == label]
+    fig_biplot.add_trace(go.Scatter(x=filtered["PC1"], y=filtered["PC2"], mode='markers', name=label))
+
+# Add loading vectors
+for i in range(loadings.shape[0]):
+    fig_biplot.add_trace(go.Scatter(x=[0, loadings.iloc[i, 0]*5], y=[0, loadings.iloc[i, 1]*5],
+                                    mode='lines+text', text=["", loadings.index[i]],
+                                    textposition="top center", name=loadings.index[i],
+                                    line=dict(color='black', width=1)))
+
+fig_biplot.update_layout(title="PCA Biplot", xaxis_title="PC1", yaxis_title="PC2")
+st.plotly_chart(fig_biplot, use_container_width=True)
+
 # Classification Model
-st.subheader("4. Halal vs Haram Classification")
+st.subheader("5. Halal vs Haram Classification")
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 model = LogisticRegression()
 model.fit(X_train, y_train)
