@@ -112,9 +112,12 @@ y_pred_labels = np.round(y_pred_pls).astype(int).flatten()
 y_pred_labels = np.clip(y_pred_labels, 0, len(label_encoder.classes_) - 1)
 y_pred_pls_class = label_encoder.inverse_transform(y_pred_labels)
 
-# Classification report as a table
+# Classification report as a formatted table
+from sklearn.metrics import classification_report
+report_dict = classification_report(y, y_pred_pls_class, output_dict=True)
+report_df = pd.DataFrame(report_dict).transpose().round(2)
 st.markdown("**Classification Report (Training Set via PLS-DA):**")
-st.text(classification_report(y, y_pred_pls_class))
+st.dataframe(report_df.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
 
 pls_conf_matrix = confusion_matrix(y, y_pred_pls_class)
 st.markdown("**Confusion Matrix (Training Set via PLS-DA):**")
