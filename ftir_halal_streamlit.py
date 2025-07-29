@@ -106,16 +106,15 @@ st.subheader("6. PLS-DA and VIP Scores")
 pls = PLSRegression(n_components=2)
 pls.fit(X_scaled, y_encoded)
 y_pred_pls = pls.predict(X_scaled)
-y_pred_labels = np.argmax(y_pred_pls, axis=1)
+
+# Fix for classification output
+y_pred_labels = np.round(y_pred_pls).astype(int).flatten()
+y_pred_labels = np.clip(y_pred_labels, 0, len(label_encoder.classes_) - 1)
 y_pred_pls_class = label_encoder.inverse_transform(y_pred_labels)
 
 # Classification report as a table
-report_dict = classification_report(y, y_pred_pls_class, output_dict=True)
-report_df = pd.DataFrame(report_dict).T.reset_index()
-report_df.rename(columns={'index': 'Class'}, inplace=True)
-
 st.markdown("**Classification Report (Training Set via PLS-DA):**")
-st.dataframe(report_df.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
+st.text(classification_report(y, y_pred_pls_class))
 
 pls_conf_matrix = confusion_matrix(y, y_pred_pls_class)
 st.markdown("**Confusion Matrix (Training Set via PLS-DA):**")
