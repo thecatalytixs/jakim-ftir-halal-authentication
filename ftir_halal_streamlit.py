@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, classification_report
 import plotly.express as px
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="FTIR-Based Halal Authentication", layout="wide")
 st.title("FTIR-Based Halal Authentication Platform")
@@ -42,8 +43,17 @@ pca_df["Class"] = y.values
 fig = px.scatter(pca_df, x="PC1", y="PC2", color="Class", title="PCA Score Plot")
 st.plotly_chart(fig, use_container_width=True)
 
+# PCA Loadings (Variable Plot)
+st.subheader("3. Variable Plot (PCA Loadings)")
+loadings = pd.DataFrame(pca.components_.T, columns=["PC1", "PC2"], index=X.columns)
+fig_loadings = go.Figure()
+fig_loadings.add_trace(go.Scatter(x=loadings["PC1"], y=loadings["PC2"], mode='markers+text',
+                                  text=loadings.index, textposition="top center"))
+fig_loadings.update_layout(title="PCA Variable Plot (Loadings)", xaxis_title="PC1", yaxis_title="PC2")
+st.plotly_chart(fig_loadings, use_container_width=True)
+
 # Classification Model
-st.subheader("3. Halal vs Haram Classification")
+st.subheader("4. Halal vs Haram Classification")
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 model = LogisticRegression()
 model.fit(X_train, y_train)
