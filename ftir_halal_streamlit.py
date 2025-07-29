@@ -131,9 +131,10 @@ pls_df = pd.DataFrame(pls_scores, columns=["PLS1", "PLS2"])
 pls_df["Class"] = y.values
 pls_df["SampleID"] = df["SampleID"].values
 
-fig_pls_obs = px.scatter(pls_df, x="PLS1", y="PLS2", color="Class", text="SampleID" if show_labels else None,
+show_labels_plsda = st.checkbox("Show SampleID labels on PLS-DA plot")
+fig_pls_obs = px.scatter(pls_df, x="PLS1", y="PLS2", color="Class", text="SampleID" if show_labels_plsda else None,
                          title="PLS-DA Observation Plot")
-fig_pls_obs.update_traces(textposition='top center' if show_labels else None)
+fig_pls_obs.update_traces(textposition='top center' if show_labels_plsda else None)
 st.plotly_chart(fig_pls_obs, use_container_width=True)
 
 # Calculate VIP scores (corrected)
