@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.cross_decomposition import PLSRegression
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -33,6 +34,10 @@ y = df["Class"]
 # Standardize the data
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
+
+# Encode class labels
+label_encoder = LabelEncoder()
+y_encoded = label_encoder.fit_transform(y)
 
 # PCA
 st.subheader("2. Principal Component Analysis (PCA)")
@@ -96,4 +101,25 @@ conf_matrix = confusion_matrix(y_test, y_pred)
 st.markdown("**Confusion Matrix:**")
 st.dataframe(pd.DataFrame(conf_matrix, index=model.classes_, columns=model.classes_))
 
-st.success("Prototype completed. Further modules (PLS-DA, VIP score, unknown prediction) can be added.")
+# PLS-DA and VIP Scores
+st.subheader("6. PLS-DA and VIP Scores")
+pls = PLSRegression(n_components=2)
+pls.fit(X_scaled, y_encoded)
+y_pls = pls.predict(X_scaled)
+
+# Calculate VIP scores
+T = pls.x_scores_
+W = pls.x_weights_
+Q = pls.y_loadings_
+p, h = W.shape
+SS = np.sum(T**2, axis=0) * np.sum(Q**2, axis=1)
+vip = np.sqrt(p * (SS @ (W**2)) / np.sum(SS))
+
+vip_df = pd.DataFrame({'Variable': X.columns, 'VIP_Score': vip})
+vip_df = vip_df.sort_values(by='VIP_Score', ascending=False)
+
+fig_vip = px.bar(vip_df.head(20), x='Variable', y='VIP_Score', title='Top 20 VIP Scores')
+st.plotly_chart(fig_vip, use_container_width=True)
+st.dataframe(vip_df)
+
+st.success("PLS-DA and VIP score module added successfully.")
