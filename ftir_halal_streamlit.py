@@ -124,6 +124,18 @@ pls_conf_matrix = confusion_matrix(y, y_pred_pls_class)
 st.markdown("**Confusion Matrix (Training Set via PLS-DA):**")
 st.dataframe(pd.DataFrame(pls_conf_matrix, index=label_encoder.classes_, columns=label_encoder.classes_))
 
+# Observation plot for PLS-DA
+st.subheader("7. PLS-DA Observation Plot")
+pls_scores = pls.x_scores_
+pls_df = pd.DataFrame(pls_scores, columns=["PLS1", "PLS2"])
+pls_df["Class"] = y.values
+pls_df["SampleID"] = df["SampleID"].values
+
+fig_pls_obs = px.scatter(pls_df, x="PLS1", y="PLS2", color="Class", text="SampleID" if show_labels else None,
+                         title="PLS-DA Observation Plot")
+fig_pls_obs.update_traces(textposition='top center' if show_labels else None)
+st.plotly_chart(fig_pls_obs, use_container_width=True)
+
 # Calculate VIP scores (corrected)
 T = pls.x_scores_
 W = pls.x_weights_
@@ -139,4 +151,4 @@ fig_vip = px.bar(vip_df.head(20), x='Variable', y='VIP_Score', title='Top 20 VIP
 st.plotly_chart(fig_vip, use_container_width=True)
 st.dataframe(vip_df)
 
-st.success("PLS-DA classification matrix and VIP score module updated successfully.")
+st.success("PLS-DA classification matrix, observation plot, and VIP score module updated successfully.")
