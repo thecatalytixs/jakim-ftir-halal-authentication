@@ -107,13 +107,13 @@ pls = PLSRegression(n_components=2)
 pls.fit(X_scaled, y_encoded)
 y_pls = pls.predict(X_scaled)
 
-# Calculate VIP scores
+# Calculate VIP scores (corrected)
 T = pls.x_scores_
 W = pls.x_weights_
 Q = pls.y_loadings_
 p, h = W.shape
-SS = np.sum(T**2, axis=0) * np.sum(Q**2, axis=1)
-vip = np.sqrt(p * (SS @ (W**2)) / np.sum(SS))
+SStotal = np.sum(np.square(T), axis=0) * np.square(Q).flatten()
+vip = np.sqrt(p * np.sum((W**2) * SStotal.reshape(1, -1), axis=1) / np.sum(SStotal))
 
 vip_df = pd.DataFrame({'Variable': X.columns, 'VIP_Score': vip})
 vip_df = vip_df.sort_values(by='VIP_Score', ascending=False)
