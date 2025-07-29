@@ -9,6 +9,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.cross_decomposition import PLSRegression
 import plotly.express as px
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 import io
 
 st.set_page_config(page_title="FTIR-Based Halal Authentication", layout="wide")
@@ -57,7 +58,19 @@ else:
     fig = px.scatter(pca_df, x="PC1", y="PC2", color="Class", title="PCA Score Plot")
 
 st.plotly_chart(fig, use_container_width=True)
-st.download_button("Download PCA Plot as PNG", fig.to_image(format="png"), file_name="pca_plot.png")
+
+# Matplotlib PNG Export
+fig_pca, ax = plt.subplots()
+for label in pca_df["Class"].unique():
+    subset = pca_df[pca_df["Class"] == label]
+    ax.scatter(subset["PC1"], subset["PC2"], label=label)
+ax.set_title("PCA Score Plot")
+ax.set_xlabel("PC1")
+ax.set_ylabel("PC2")
+ax.legend()
+buf = io.BytesIO()
+fig_pca.savefig(buf, format="png")
+st.download_button("Download PCA Plot as PNG", data=buf.getvalue(), file_name="pca_plot.png", mime="image/png")
 
 # PCA Loadings (Variable Plot)
 st.subheader("3. Variable Plot (PCA Loadings)")
@@ -67,7 +80,6 @@ fig_loadings.add_trace(go.Scatter(x=loadings["PC1"], y=loadings["PC2"], mode='ma
                                   text=loadings.index, textposition="top center"))
 fig_loadings.update_layout(title="PCA Variable Plot (Loadings)", xaxis_title="PC1", yaxis_title="PC2")
 st.plotly_chart(fig_loadings, use_container_width=True)
-st.download_button("Download Variable Plot as PNG", fig_loadings.to_image(format="png"), file_name="pca_variable_plot.png")
 
 # PCA Biplot
 st.subheader("4. PCA Biplot")
@@ -89,7 +101,6 @@ for i in range(loadings.shape[0]):
 
 fig_biplot.update_layout(title="PCA Biplot", xaxis_title="PC1", yaxis_title="PC2")
 st.plotly_chart(fig_biplot, use_container_width=True)
-st.download_button("Download Biplot as PNG", fig_biplot.to_image(format="png"), file_name="pca_biplot.png")
 
 # Classification Model
 st.subheader("5. Halal vs Haram Classification")
@@ -146,7 +157,19 @@ fig_pls_obs = px.scatter(pls_df, x="PLS1", y="PLS2", color="Class", text="Sample
                          title="PLS-DA Observation Plot")
 fig_pls_obs.update_traces(textposition='top center' if show_labels_plsda else None)
 st.plotly_chart(fig_pls_obs, use_container_width=True)
-st.download_button("Download PLS-DA Plot as PNG", fig_pls_obs.to_image(format="png"), file_name="plsda_observation_plot.png")
+
+# Matplotlib PNG Export for PLS-DA
+fig_plsda, ax2 = plt.subplots()
+for label in pls_df["Class"].unique():
+    subset = pls_df[pls_df["Class"] == label]
+    ax2.scatter(subset["PLS1"], subset["PLS2"], label=label)
+ax2.set_title("PLS-DA Observation Plot")
+ax2.set_xlabel("PLS1")
+ax2.set_ylabel("PLS2")
+ax2.legend()
+buf2 = io.BytesIO()
+fig_plsda.savefig(buf2, format="png")
+st.download_button("Download PLS-DA Plot as PNG", data=buf2.getvalue(), file_name="plsda_observation_plot.png", mime="image/png")
 
 # Calculate VIP scores (corrected)
 T = pls.x_scores_
@@ -161,8 +184,7 @@ vip_df = vip_df.sort_values(by='VIP_Score', ascending=False)
 
 fig_vip = px.bar(vip_df.head(20), x='Variable', y='VIP_Score', title='Top 20 VIP Scores')
 st.plotly_chart(fig_vip, use_container_width=True)
-st.download_button("Download VIP Score Plot as PNG", fig_vip.to_image(format="png"), file_name="vip_score_plot.png")
+st.download_button("Download VIP Score Plot as CSV", vip_df.to_csv(index=False).encode(), file_name="vip_scores.csv")
 st.dataframe(vip_df)
-st.download_button("Download VIP Scores as CSV", vip_df.to_csv(index=False).encode(), file_name="vip_scores.csv")
 
 st.success("PLS-DA classification matrix, observation plot, and VIP score module updated successfully.")
