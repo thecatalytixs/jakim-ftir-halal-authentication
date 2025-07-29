@@ -11,13 +11,17 @@ import plotly.express as px
 st.set_page_config(page_title="FTIR-Based Halal Authentication", layout="wide")
 st.title("FTIR-Based Halal Authentication Platform")
 
-# Load example dataset
-@st.cache_data
-def load_data():
-    df = pd.read_csv("simulated_ftir_data.csv")  # replace with actual path or file uploader
-    return df
+# File uploader
+uploaded_file = st.file_uploader("Upload your FTIR dataset (CSV format only)", type=["csv"])
 
-df = load_data()
+@st.cache_data
+def load_data(uploaded_file):
+    if uploaded_file is not None:
+        return pd.read_csv(uploaded_file)
+    else:
+        return pd.read_csv("simulated_ftir_data.csv")  # fallback demo file
+
+df = load_data(uploaded_file)
 st.subheader("1. Preview of Uploaded Dataset")
 st.dataframe(df.head())
 
