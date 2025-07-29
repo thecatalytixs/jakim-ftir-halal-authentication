@@ -95,7 +95,9 @@ model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 
 st.markdown("**Classification Report (Test Set):**")
-st.text(classification_report(y_test, y_pred))
+report_dict_test = classification_report(y_test, y_pred, output_dict=True)
+report_df_test = pd.DataFrame(report_dict_test).transpose().round(2)
+st.dataframe(report_df_test.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
 
 conf_matrix = confusion_matrix(y_test, y_pred)
 st.markdown("**Confusion Matrix (Test Set):**")
@@ -113,7 +115,6 @@ y_pred_labels = np.clip(y_pred_labels, 0, len(label_encoder.classes_) - 1)
 y_pred_pls_class = label_encoder.inverse_transform(y_pred_labels)
 
 # Classification report as a formatted table
-from sklearn.metrics import classification_report
 report_dict = classification_report(y, y_pred_pls_class, output_dict=True)
 report_df = pd.DataFrame(report_dict).transpose().round(2)
 st.markdown("**Classification Report (Training Set via PLS-DA):**")
