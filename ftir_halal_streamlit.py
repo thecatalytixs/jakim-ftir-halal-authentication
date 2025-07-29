@@ -94,18 +94,26 @@ model = LogisticRegression()
 model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 
-st.markdown("**Classification Report:**")
+st.markdown("**Classification Report (Test Set):**")
 st.text(classification_report(y_test, y_pred))
 
 conf_matrix = confusion_matrix(y_test, y_pred)
-st.markdown("**Confusion Matrix:**")
+st.markdown("**Confusion Matrix (Test Set):**")
 st.dataframe(pd.DataFrame(conf_matrix, index=model.classes_, columns=model.classes_))
 
 # PLS-DA and VIP Scores
 st.subheader("6. PLS-DA and VIP Scores")
 pls = PLSRegression(n_components=2)
 pls.fit(X_scaled, y_encoded)
-y_pls = pls.predict(X_scaled)
+y_pred_pls = pls.predict(X_scaled)
+y_pred_pls_class = label_encoder.inverse_transform(np.argmax(np.eye(len(label_encoder.classes_))[np.round(y_pred_pls).astype(int).flatten()], axis=1))
+
+st.markdown("**Classification Report (Training Set via PLS-DA):**")
+st.text(classification_report(y, y_pred_pls_class))
+
+pls_conf_matrix = confusion_matrix(y, y_pred_pls_class)
+st.markdown("**Confusion Matrix (Training Set via PLS-DA):**")
+st.dataframe(pd.DataFrame(pls_conf_matrix, index=label_encoder.classes_, columns=label_encoder.classes_))
 
 # Calculate VIP scores (corrected)
 T = pls.x_scores_
@@ -122,4 +130,4 @@ fig_vip = px.bar(vip_df.head(20), x='Variable', y='VIP_Score', title='Top 20 VIP
 st.plotly_chart(fig_vip, use_container_width=True)
 st.dataframe(vip_df)
 
-st.success("PLS-DA and VIP score module added successfully.")
+st.success("PLS-DA classification matrix and VIP score module updated successfully.")
