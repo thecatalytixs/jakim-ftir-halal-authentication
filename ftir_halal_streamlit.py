@@ -9,6 +9,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.cross_decomposition import PLSRegression
 import plotly.express as px
 import plotly.graph_objects as go
+import io
 
 st.set_page_config(page_title="FTIR-Based Halal Authentication", layout="wide")
 st.title("FTIR-Based Halal Authentication Platform")
@@ -56,6 +57,7 @@ else:
     fig = px.scatter(pca_df, x="PC1", y="PC2", color="Class", title="PCA Score Plot")
 
 st.plotly_chart(fig, use_container_width=True)
+st.download_button("Download PCA Plot as PNG", fig.to_image(format="png"), file_name="pca_plot.png")
 
 # PCA Loadings (Variable Plot)
 st.subheader("3. Variable Plot (PCA Loadings)")
@@ -65,6 +67,7 @@ fig_loadings.add_trace(go.Scatter(x=loadings["PC1"], y=loadings["PC2"], mode='ma
                                   text=loadings.index, textposition="top center"))
 fig_loadings.update_layout(title="PCA Variable Plot (Loadings)", xaxis_title="PC1", yaxis_title="PC2")
 st.plotly_chart(fig_loadings, use_container_width=True)
+st.download_button("Download Variable Plot as PNG", fig_loadings.to_image(format="png"), file_name="pca_variable_plot.png")
 
 # PCA Biplot
 st.subheader("4. PCA Biplot")
@@ -86,6 +89,7 @@ for i in range(loadings.shape[0]):
 
 fig_biplot.update_layout(title="PCA Biplot", xaxis_title="PC1", yaxis_title="PC2")
 st.plotly_chart(fig_biplot, use_container_width=True)
+st.download_button("Download Biplot as PNG", fig_biplot.to_image(format="png"), file_name="pca_biplot.png")
 
 # Classification Model
 st.subheader("5. Halal vs Haram Classification")
@@ -98,10 +102,13 @@ st.markdown("**Classification Report (Test Set):**")
 report_dict_test = classification_report(y_test, y_pred, output_dict=True)
 report_df_test = pd.DataFrame(report_dict_test).transpose().round(2)
 st.dataframe(report_df_test.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
+st.download_button("Download Test Classification Report as CSV", report_df_test.to_csv().encode(), file_name="test_classification_report.csv")
 
 conf_matrix = confusion_matrix(y_test, y_pred)
 st.markdown("**Confusion Matrix (Test Set):**")
-st.dataframe(pd.DataFrame(conf_matrix, index=model.classes_, columns=model.classes_))
+conf_df = pd.DataFrame(conf_matrix, index=model.classes_, columns=model.classes_)
+st.dataframe(conf_df)
+st.download_button("Download Test Confusion Matrix as CSV", conf_df.to_csv().encode(), file_name="test_confusion_matrix.csv")
 
 # PLS-DA and VIP Scores
 st.subheader("6. PLS-DA and VIP Scores")
@@ -119,10 +126,13 @@ report_dict = classification_report(y, y_pred_pls_class, output_dict=True)
 report_df = pd.DataFrame(report_dict).transpose().round(2)
 st.markdown("**Classification Report (Training Set via PLS-DA):**")
 st.dataframe(report_df.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
+st.download_button("Download Training Classification Report as CSV", report_df.to_csv().encode(), file_name="training_classification_report.csv")
 
 pls_conf_matrix = confusion_matrix(y, y_pred_pls_class)
 st.markdown("**Confusion Matrix (Training Set via PLS-DA):**")
-st.dataframe(pd.DataFrame(pls_conf_matrix, index=label_encoder.classes_, columns=label_encoder.classes_))
+pls_conf_df = pd.DataFrame(pls_conf_matrix, index=label_encoder.classes_, columns=label_encoder.classes_)
+st.dataframe(pls_conf_df)
+st.download_button("Download Training Confusion Matrix as CSV", pls_conf_df.to_csv().encode(), file_name="training_confusion_matrix.csv")
 
 # Observation plot for PLS-DA
 st.subheader("7. PLS-DA Observation Plot")
@@ -136,6 +146,7 @@ fig_pls_obs = px.scatter(pls_df, x="PLS1", y="PLS2", color="Class", text="Sample
                          title="PLS-DA Observation Plot")
 fig_pls_obs.update_traces(textposition='top center' if show_labels_plsda else None)
 st.plotly_chart(fig_pls_obs, use_container_width=True)
+st.download_button("Download PLS-DA Plot as PNG", fig_pls_obs.to_image(format="png"), file_name="plsda_observation_plot.png")
 
 # Calculate VIP scores (corrected)
 T = pls.x_scores_
@@ -150,6 +161,8 @@ vip_df = vip_df.sort_values(by='VIP_Score', ascending=False)
 
 fig_vip = px.bar(vip_df.head(20), x='Variable', y='VIP_Score', title='Top 20 VIP Scores')
 st.plotly_chart(fig_vip, use_container_width=True)
+st.download_button("Download VIP Score Plot as PNG", fig_vip.to_image(format="png"), file_name="vip_score_plot.png")
 st.dataframe(vip_df)
+st.download_button("Download VIP Scores as CSV", vip_df.to_csv(index=False).encode(), file_name="vip_scores.csv")
 
 st.success("PLS-DA classification matrix, observation plot, and VIP score module updated successfully.")
