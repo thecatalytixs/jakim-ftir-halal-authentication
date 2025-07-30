@@ -15,8 +15,8 @@ import io
 # Force matplotlib to use light theme
 plt.style.use('default')
 
-st.set_page_config(page_title="FTIR-Based Halal Authentication", layout="wide")
-st.title("FTIR-Based Halal Authentication Platform")
+st.set_page_config(page_title="Halal Authentication Platform", layout="wide")
+st.title("Halal Authentication Platform")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload your FTIR dataset (CSV format only)", type=["csv"])
