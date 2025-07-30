@@ -62,51 +62,51 @@ else:
 
 st.plotly_chart(fig, use_container_width=True)
 
-# Matplotlib PNG Export for 2D plot
-fig_pca, ax = plt.subplots()
-for label in pca_df["Class"].unique():
-    subset = pca_df[pca_df["Class"] == label]
-    ax.scatter(subset["PC1"], subset["PC2"], label=label)
-ax.set_title("PCA Score Plot (PC1 vs PC2)")
-ax.set_xlabel("PC1")
-ax.set_ylabel("PC2")
-ax.legend()
-buf = io.BytesIO()
-fig_pca.savefig(buf, format="png", facecolor='white')
-st.download_button("Download PCA Plot as PNG", data=buf.getvalue(), file_name="pca_plot.png", mime="image/png")
-
 # PCA Loadings (Variable Plot)
 st.subheader("3. Variable Plot (PCA Loadings)")
 loadings = pd.DataFrame(pca.components_.T, columns=["PC1", "PC2", "PC3"], index=X.columns)
-fig_loadings, ax_load = plt.subplots()
-ax_load.scatter(loadings["PC1"], loadings["PC2"])
-for i, txt in enumerate(loadings.index):
-    ax_load.annotate(txt, (loadings["PC1"][i], loadings["PC2"][i]))
-ax_load.set_title("PCA Variable Plot (Loadings PC1 vs PC2)")
-ax_load.set_xlabel("PC1")
-ax_load.set_ylabel("PC2")
-buf_load = io.BytesIO()
-fig_loadings.savefig(buf_load, format="png", facecolor='white')
-st.pyplot(fig_loadings)
-st.download_button("Download Variable Plot as PNG", data=buf_load.getvalue(), file_name="variable_plot.png", mime="image/png")
+fig_loadings = px.scatter_3d(loadings.reset_index(), x="PC1", y="PC2", z="PC3", text="index")
+fig_loadings.update_layout(title="PCA Loadings Plot (PC1 vs PC2 vs PC3)", scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3'))
+st.plotly_chart(fig_loadings, use_container_width=True)
 
 # PCA Biplot
 st.subheader("4. PCA Biplot")
-fig_biplot, ax_bi = plt.subplots()
+fig_biplot = go.Figure()
+
+# Add scores
 for label in pca_df["Class"].unique():
-    filtered = pca_df[pca_df["Class"] == label]
-    ax_bi.scatter(filtered["PC1"], filtered["PC2"], label=label)
-    if show_labels:
-        for i in range(len(filtered)):
-            ax_bi.annotate(filtered["SampleID"].iloc[i], (filtered["PC1"].iloc[i], filtered["PC2"].iloc[i]))
+    subset = pca_df[pca_df["Class"] == label]
+    fig_biplot.add_trace(go.Scatter3d(x=subset["PC1"], y=subset["PC2"], z=subset["PC3"],
+                                      mode='markers+text' if show_labels else 'markers',
+                                      text=subset["SampleID"] if show_labels else None,
+                                      name=label))
+
+# Add loadings
 for i in range(loadings.shape[0]):
-    ax_bi.arrow(0, 0, loadings.iloc[i, 0]*5, loadings.iloc[i, 1]*5, color='r', alpha=0.5)
-    ax_bi.text(loadings.iloc[i, 0]*5, loadings.iloc[i, 1]*5, loadings.index[i], color='r')
-ax_bi.set_title("PCA Biplot (PC1 vs PC2)")
-ax_bi.set_xlabel("PC1")
-ax_bi.set_ylabel("PC2")
-ax_bi.legend()
-buf_biplot = io.BytesIO()
-fig_biplot.savefig(buf_biplot, format="png", facecolor='white')
-st.pyplot(fig_biplot)
-st.download_button("Download PCA Biplot as PNG", data=buf_biplot.getvalue(), file_name="pca_biplot.png", mime="image/png")
+    fig_biplot.add_trace(go.Scatter3d(x=[0, loadings.iloc[i, 0]*3], y=[0, loadings.iloc[i, 1]*3], z=[0, loadings.iloc[i, 2]*3],
+                                      mode='lines+text',
+                                      text=["", loadings.index[i]],
+                                      name=loadings.index[i],
+                                      line=dict(color='black', width=2)))
+
+fig_biplot.update_layout(title="PCA Biplot (PC1 vs PC2 vs PC3)",
+                         scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3'))
+st.plotly_chart(fig_biplot, use_container_width=True)
+
+# PLS-DA Scores Plot
+st.subheader("5. PLS-DA Observation Plot")
+pls = PLSRegression(n_components=3)
+pls.fit(X_scaled, y_encoded)
+pls_scores = pls.x_scores_
+pls_df = pd.DataFrame(pls_scores, columns=["PLS1", "PLS2", "PLS3"])
+pls_df["Class"] = y.values
+pls_df["SampleID"] = df["SampleID"].values
+
+show_pls_labels = st.checkbox("Show SampleID labels on PLS-DA plot")
+if show_pls_labels:
+    fig_pls = px.scatter_3d(pls_df, x="PLS1", y="PLS2", z="PLS3", color="Class", text="SampleID", title="PLS-DA Observation Plot (3D)")
+    fig_pls.update_traces(textposition='top center')
+else:
+    fig_pls = px.scatter_3d(pls_df, x="PLS1", y="PLS2", z="PLS3", color="Class", title="PLS-DA Observation Plot (3D)")
+
+st.plotly_chart(fig_pls, use_container_width=True)
