@@ -3,126 +3,156 @@ import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split, cross_val_score, cross_val_predict
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.cross_decomposition import PLSRegression
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
+import io
 
+# Force matplotlib to use light theme
 plt.style.use('default')
 
-st.title("FTIR-Based Halal Authentication Platform")
+st.set_page_config(page_title="Halal Authentication Platform", layout="wide")
+st.title("Halal Authentication Platform")
 
+# File uploader
 uploaded_file = st.file_uploader("Upload your FTIR dataset (CSV format only)", type=["csv"])
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.write("Preview of Uploaded Data:")
-    st.dataframe(df.head())
+@st.cache_data
+def load_data(uploaded_file):
+    if uploaded_file is not None:
+        return pd.read_csv(uploaded_file)
+    else:
+        return pd.read_csv("simulated_ftir_data.csv")  # fallback demo file
 
-    label_col = st.selectbox("Select the label column", df.columns)
+df = load_data(uploaded_file)
+st.subheader("1. Preview of Uploaded Dataset")
+st.dataframe(df.head())
 
-    features = df.drop(columns=[label_col])
-    labels = df[label_col]
+# Extract features and class labels
+X = df.drop(columns=["SampleID", "Class"])
+y = df["Class"]
 
-    # Encode labels
-    label_encoder = LabelEncoder()
-    y_encoded = label_encoder.fit_transform(labels)
+# Standardize the data
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-    # Ensure features are numeric
-    try:
-        features = features.apply(pd.to_numeric)
-    except ValueError:
-        st.error("All feature columns must be numeric. Please check your data.")
-        st.stop()
+# Encode class labels
+label_encoder = LabelEncoder()
+y_encoded = label_encoder.fit_transform(y)
 
-    # Standardize features
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(features)
+# PCA
+st.subheader("2. Principal Component Analysis (PCA)")
+pca = PCA(n_components=3)
+pca_scores = pca.fit_transform(X_scaled)
+pca_df = pd.DataFrame(data=pca_scores, columns=["PC1", "PC2", "PC3"])
+pca_df["Class"] = y.values
+pca_df["SampleID"] = df["SampleID"].values
 
-    # PCA Analysis
-    st.subheader("PCA Analysis")
-    pca = PCA(n_components=2)
-    components = pca.fit_transform(X_scaled)
-    pca_df = pd.DataFrame(data=components, columns=["PC1", "PC2"])
-    pca_df["Label"] = labels.values
+# Option to toggle SampleID labels
+show_labels = st.checkbox("Show SampleID labels on PCA plot")
+if show_labels:
+    fig = px.scatter_3d(pca_df, x="PC1", y="PC2", z="PC3", color="Class", text="SampleID", title="PCA Score Plot (3D)")
+    fig.update_traces(textposition='top center')
+else:
+    fig = px.scatter_3d(pca_df, x="PC1", y="PC2", z="PC3", color="Class", title="PCA Score Plot (3D)")
 
-    fig_pca = px.scatter(pca_df, x="PC1", y="PC2", color="Label", title="PCA Score Plot")
-    st.plotly_chart(fig_pca)
+st.plotly_chart(fig, use_container_width=True)
 
-    # PCA Loadings Plot
-    loadings = pd.DataFrame(pca.components_.T, columns=["PC1", "PC2"], index=features.columns)
-    st.subheader("PCA Variable Plot")
-    fig_loadings = px.scatter(loadings, x="PC1", y="PC2", text=loadings.index, title="PCA Variable Plot")
-    fig_loadings.update_traces(textposition='top center')
-    st.plotly_chart(fig_loadings)
+# PCA Loadings (Variable Plot)
+st.subheader("3. Variable Plot (PCA Loadings)")
+loadings = pd.DataFrame(pca.components_.T, columns=["PC1", "PC2", "PC3"], index=X.columns)
+fig_loadings = px.scatter_3d(loadings.reset_index(), x="PC1", y="PC2", z="PC3", text="index")
+fig_loadings.update_layout(title="PCA Loadings Plot (PC1 vs PC2 vs PC3)", scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3'))
+st.plotly_chart(fig_loadings, use_container_width=True)
 
-    # Biplot
-    st.subheader("PCA Biplot")
-    fig_biplot = px.scatter(pca_df, x="PC1", y="PC2", color="Label")
-    for i in range(len(loadings)):
-        fig_biplot.add_shape(type='line', x0=0, y0=0, x1=loadings.iloc[i, 0]*5, y1=loadings.iloc[i, 1]*5,
-                             line=dict(color='black', width=1))
-        fig_biplot.add_annotation(x=loadings.iloc[i, 0]*5, y=loadings.iloc[i, 1]*5,
-                                  ax=0, ay=0, xanchor="center", yanchor="bottom",
-                                  text=loadings.index[i], showarrow=True, arrowhead=2)
-    st.plotly_chart(fig_biplot)
+# PCA Biplot
+st.subheader("4. PCA Biplot")
+fig_biplot = go.Figure()
 
-    # PLS-DA Analysis
-    st.subheader("PLS-DA Analysis")
-    pls = PLSRegression(n_components=2)
-    pls_fit = pls.fit(X_scaled, y_encoded)
-    pls_scores = pls_fit.x_scores_
-    pls_df = pd.DataFrame(data=pls_scores, columns=["PLS1", "PLS2"])
-    pls_df["Label"] = labels.values
+# Add scores
+for label in pca_df["Class"].unique():
+    subset = pca_df[pca_df["Class"] == label]
+    fig_biplot.add_trace(go.Scatter3d(x=subset["PC1"], y=subset["PC2"], z=subset["PC3"],
+                                      mode='markers+text' if show_labels else 'markers',
+                                      text=subset["SampleID"] if show_labels else None,
+                                      name=label))
 
-    fig_plsda = px.scatter(pls_df, x="PLS1", y="PLS2", color="Label", title="PLS-DA Score Plot")
-    st.plotly_chart(fig_plsda)
+# Add loadings
+for i in range(loadings.shape[0]):
+    fig_biplot.add_trace(go.Scatter3d(x=[0, loadings.iloc[i, 0]*3], y=[0, loadings.iloc[i, 1]*3], z=[0, loadings.iloc[i, 2]*3],
+                                      mode='lines+text',
+                                      text=["", loadings.index[i]],
+                                      name=loadings.index[i],
+                                      line=dict(color='black', width=2)))
 
-    # Variable Importance in Projection (VIP)
-    st.subheader("Variable Importance (VIP) Scores")
-    t = pls.x_scores_
-    w = pls.x_weights_
-    q = pls.y_loadings_
-    p, h = w.shape
-    vips = np.zeros((p,))
-    s = np.diag(t.T @ t @ q.T @ q).reshape(h, -1)
-    total_s = np.sum(s)
-    for i in range(p):
-        weight = np.array([(w[i, j] / np.linalg.norm(w[:, j])) ** 2 for j in range(h)])
-        vips[i] = np.sqrt(p * (s.T @ weight) / total_s)
-    vip_scores = pd.Series(vips, index=features.columns)
-    st.dataframe(vip_scores.sort_values(ascending=False).reset_index().rename(columns={"index": "Variable", 0: "VIP Score"}))
+fig_biplot.update_layout(title="PCA Biplot (PC1 vs PC2 vs PC3)",
+                         scene=dict(xaxis_title='PC1', yaxis_title='PC2', zaxis_title='PC3'))
+st.plotly_chart(fig_biplot, use_container_width=True)
 
-    # Logistic Regression Classifier
-    st.subheader("Classification using Logistic Regression")
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
+# PLS-DA Scores Plot
+st.subheader("5. PLS-DA Observation Plot")
+pls = PLSRegression(n_components=3)
+pls.fit(X_scaled, y_encoded)
+pls_scores = pls.x_scores_
+pls_df = pd.DataFrame(pls_scores, columns=["PLS1", "PLS2", "PLS3"])
+pls_df["Class"] = y.values
+pls_df["SampleID"] = df["SampleID"].values
 
-    st.text("Classification Report:")
-    st.text(classification_report(y_test, y_pred, target_names=label_encoder.classes_))
+show_pls_labels = st.checkbox("Show SampleID labels on PLS-DA plot")
+if show_pls_labels:
+    fig_pls = px.scatter_3d(pls_df, x="PLS1", y="PLS2", z="PLS3", color="Class", text="SampleID", title="PLS-DA Observation Plot (3D)")
+    fig_pls.update_traces(textposition='top center')
+else:
+    fig_pls = px.scatter_3d(pls_df, x="PLS1", y="PLS2", z="PLS3", color="Class", title="PLS-DA Observation Plot (3D)")
 
-    st.text("Confusion Matrix:")
-    cm = confusion_matrix(y_test, y_pred)
-    fig_cm = go.Figure(data=go.Heatmap(z=cm, x=label_encoder.classes_, y=label_encoder.classes_,
-                                       colorscale='Blues', showscale=True))
-    fig_cm.update_layout(title="Confusion Matrix (Test Set)", xaxis_title="Predicted", yaxis_title="Actual")
-    st.plotly_chart(fig_cm)
+st.plotly_chart(fig_pls, use_container_width=True)
 
-    # Cross-validation
-    st.subheader("Cross-Validation Accuracy")
-    scores = cross_val_score(model, X_scaled, y_encoded, cv=5)
-    st.write(f"Average Accuracy: {scores.mean():.2f} ± {scores.std():.2f}")
+# PLS-DA Classification Report (Full Set)
+y_pred_pls = pls.predict(X_scaled)
+y_pred_labels = np.round(y_pred_pls).astype(int).flatten()
+y_pred_labels = np.clip(y_pred_labels, 0, len(label_encoder.classes_) - 1)
+y_pred_classes = label_encoder.inverse_transform(y_pred_labels)
 
-    # Confusion Matrix from Cross-Validation
-    st.subheader("Cross-Validation Confusion Matrix")
-    y_cv_pred = cross_val_predict(model, X_scaled, y_encoded, cv=5)
-    cm_cv = confusion_matrix(y_encoded, y_cv_pred)
-    fig_cm_cv = go.Figure(data=go.Heatmap(z=cm_cv, x=label_encoder.classes_, y=label_encoder.classes_,
-                                          colorscale='Purples', showscale=True))
-    fig_cm_cv.update_layout(title="Confusion Matrix (Cross-Validation)", xaxis_title="Predicted", yaxis_title="Actual")
-    st.plotly_chart(fig_cm_cv)
+report_dict = classification_report(y, y_pred_classes, output_dict=True)
+report_df = pd.DataFrame(report_dict).transpose().round(2)
+st.markdown("**Classification Report (Training Set via PLS-DA):**")
+st.dataframe(report_df, use_container_width=True)
+
+pls_conf_matrix = confusion_matrix(y, y_pred_classes)
+st.markdown("**Confusion Matrix (Training Set via PLS-DA):**")
+st.dataframe(pd.DataFrame(pls_conf_matrix, index=label_encoder.classes_, columns=label_encoder.classes_))
+
+# PLS-DA VIP Scores
+T = pls.x_scores_
+W = pls.x_weights_
+Q = pls.y_loadings_
+p, h = W.shape
+SStotal = np.sum(np.square(T), axis=0) * np.square(Q).flatten()
+vip = np.sqrt(p * np.sum((W**2) * SStotal.reshape(1, -1), axis=1) / np.sum(SStotal))
+
+vip_df = pd.DataFrame({'Variable': X.columns, 'VIP_Score': vip})
+vip_df = vip_df.sort_values(by='VIP_Score', ascending=False)
+
+fig_vip = px.bar(vip_df.head(20), x='Variable', y='VIP_Score', title='Top 20 VIP Scores')
+st.plotly_chart(fig_vip, use_container_width=True)
+st.dataframe(vip_df)
+
+# Classification with Logistic Regression (Test Set)
+st.subheader("6. Logistic Regression Classification (Test Set)")
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
+model = LogisticRegression()
+model.fit(X_train, y_train)
+y_pred_test = model.predict(X_test)
+
+report_dict_test = classification_report(y_test, y_pred_test, target_names=label_encoder.classes_, output_dict=True)
+report_df_test = pd.DataFrame(report_dict_test).transpose().round(2)
+st.markdown("**Classification Report (Test Set):**")
+st.dataframe(report_df_test, use_container_width=True)
+
+conf_matrix_test = confusion_matrix(y_test, y_pred_test)
+st.markdown("**Confusion Matrix (Test Set):**")
+st.dataframe(pd.DataFrame(conf_matrix_test, index=label_encoder.classes_, columns=label_encoder.classes_))
