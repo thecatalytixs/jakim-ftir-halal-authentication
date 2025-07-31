@@ -3,181 +3,119 @@ import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score, cross_val_predict
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.cross_decomposition import PLSRegression
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
-import requests
-import json
 
 plt.style.use('default')
 
-# Firebase Config
-FIREBASE_API_KEY = st.secrets["FIREBASE_API_KEY"]
-FIREBASE_AUTH_URL = f"https://identitytoolkit.googleapis.com/v1/accounts"
-FIREBASE_PROJECT_ID = st.secrets["FIREBASE_PROJECT_ID"]
-
-# Firebase Auth REST Functions
-def sign_in(email, password):
-    payload = {
-        "email": email,
-        "password": password,
-        "returnSecureToken": True
-    }
-    url = f"{FIREBASE_AUTH_URL}:signInWithPassword?key={FIREBASE_API_KEY}"
-    res = requests.post(url, data=json.dumps(payload))
-    return res.json() if res.status_code == 200 else None
-
-def sign_up(email, password):
-    payload = {
-        "email": email,
-        "password": password,
-        "returnSecureToken": True
-    }
-    url = f"{FIREBASE_AUTH_URL}:signUp?key={FIREBASE_API_KEY}"
-    res = requests.post(url, data=json.dumps(payload))
-    if res.status_code == 200:
-        user_data = res.json()
-        store_user_info(user_data["localId"], email)
-        return user_data
-    return None
-
-def store_user_info(uid, email):
-    url = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents/users?documentId={uid}"
-    headers = {
-        "Content-Type": "application/json"
-    }
-    data = {
-        "fields": {
-            "email": {"stringValue": email}
-        }
-    }
-    requests.post(url, headers=headers, data=json.dumps(data))
-
-def get_registered_users():
-    url = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents/users"
-    res = requests.get(url)
-    if res.status_code == 200:
-        docs = res.json().get("documents", [])
-        return [doc["fields"]["email"]["stringValue"] for doc in docs]
-    return []
-
-# Initialize session
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.user_email = ""
-
-# Sidebar - Login/Signup
-st.sidebar.title("User Access")
-access_mode = st.sidebar.radio("Access Mode", ("Sign In", "Sign Up"), label_visibility="collapsed")
-
-if access_mode == "Sign In":
-    st.sidebar.subheader("Sign In")
-    login_email = st.sidebar.text_input("Email")
-    login_password = st.sidebar.text_input("Password", type="password")
-    if st.sidebar.button("Login"):
-        user = sign_in(login_email, login_password)
-        if user:
-            st.session_state.authenticated = True
-            st.session_state.user_email = login_email
-            st.sidebar.success("Login successful!")
-        else:
-            st.sidebar.error("Invalid email or password.")
-
-elif access_mode == "Sign Up":
-    st.sidebar.subheader("Create Account")
-    signup_email = st.sidebar.text_input("Email")
-    signup_password = st.sidebar.text_input("Password", type="password")
-
-    if st.sidebar.button("Register"):
-        if signup_email and signup_password:
-            result = sign_up(signup_email, signup_password)
-            if result:
-                st.sidebar.success("User registered successfully! Please log in.")
-            else:
-                st.sidebar.error("Registration failed.")
-        else:
-            st.sidebar.error("Please fill in all fields.")
-
-# Sign out button
-if st.session_state.authenticated:
-    if st.sidebar.button("Sign Out"):
-        st.session_state.authenticated = False
-        st.session_state.user_email = ""
-        st.rerun()
-
-# Main App
 st.title("FTIR-Based Halal Authentication Platform")
 
-if not st.session_state.authenticated:
-    st.write("Welcome to the FTIR Halal Authentication tools. Please sign in to continue.")
-else:
-    st.write(f"Welcome {st.session_state.user_email}! Upload your dataset to begin analysis.")
+uploaded_file = st.file_uploader("Upload your FTIR dataset (CSV format only)", type=["csv"])
 
-    if st.session_state.user_email == "thecatalytixs@gmail.com":
-        if st.button("Show Registered Users"):
-            users = get_registered_users()
-            st.write("### Registered Users:")
-            for i, email in enumerate(users, 1):
-                st.write(f"{i}. {email}")
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    st.write("Preview of Uploaded Data:")
+    st.dataframe(df.head())
 
-    uploaded_file = st.file_uploader("Upload your FTIR dataset (CSV format only)", type=["csv"])
+    label_col = st.selectbox("Select the label column", df.columns)
 
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        st.write("Preview of Uploaded Data:")
-        st.dataframe(df.head())
+    features = df.drop(columns=[label_col])
+    labels = df[label_col]
 
-        label_col = st.selectbox("Select the label column", df.columns)
+    # Encode labels
+    label_encoder = LabelEncoder()
+    y_encoded = label_encoder.fit_transform(labels)
 
-        features = df.drop(columns=[label_col])
-        labels = df[label_col]
+    # Standardize features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(features)
 
-        # Encode labels
-        label_encoder = LabelEncoder()
-        y_encoded = label_encoder.fit_transform(labels)
+    # PCA Analysis
+    st.subheader("PCA Analysis")
+    pca = PCA(n_components=2)
+    components = pca.fit_transform(X_scaled)
+    pca_df = pd.DataFrame(data=components, columns=["PC1", "PC2"])
+    pca_df["Label"] = labels.values
 
-        # Standardize features
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(features)
+    fig_pca = px.scatter(pca_df, x="PC1", y="PC2", color="Label", title="PCA Score Plot")
+    st.plotly_chart(fig_pca)
 
-        # PCA Analysis
-        st.subheader("PCA Analysis")
-        pca = PCA(n_components=2)
-        components = pca.fit_transform(X_scaled)
-        pca_df = pd.DataFrame(data=components, columns=["PC1", "PC2"])
-        pca_df["Label"] = labels.values
+    # PCA Loadings Plot
+    loadings = pd.DataFrame(pca.components_.T, columns=["PC1", "PC2"], index=features.columns)
+    st.subheader("PCA Variable Plot")
+    fig_loadings = px.scatter(loadings, x="PC1", y="PC2", text=loadings.index, title="PCA Variable Plot")
+    fig_loadings.update_traces(textposition='top center')
+    st.plotly_chart(fig_loadings)
 
-        fig_pca = px.scatter(pca_df, x="PC1", y="PC2", color="Label", title="PCA Score Plot")
-        st.plotly_chart(fig_pca)
+    # Biplot
+    st.subheader("PCA Biplot")
+    fig_biplot = px.scatter(pca_df, x="PC1", y="PC2", color="Label")
+    for i in range(len(loadings)):
+        fig_biplot.add_shape(type='line', x0=0, y0=0, x1=loadings.iloc[i, 0]*5, y1=loadings.iloc[i, 1]*5,
+                             line=dict(color='black', width=1))
+        fig_biplot.add_annotation(x=loadings.iloc[i, 0]*5, y=loadings.iloc[i, 1]*5,
+                                  ax=0, ay=0, xanchor="center", yanchor="bottom",
+                                  text=loadings.index[i], showarrow=True, arrowhead=2)
+    st.plotly_chart(fig_biplot)
 
-        # PLS-DA Analysis
-        st.subheader("PLS-DA Analysis")
-        pls = PLSRegression(n_components=2)
-        pls_fit = pls.fit(X_scaled, y_encoded)
-        pls_scores = pls_fit.x_scores_
-        pls_df = pd.DataFrame(data=pls_scores, columns=["PLS1", "PLS2"])
-        pls_df["Label"] = labels.values
+    # PLS-DA Analysis
+    st.subheader("PLS-DA Analysis")
+    pls = PLSRegression(n_components=2)
+    pls_fit = pls.fit(X_scaled, y_encoded)
+    pls_scores = pls_fit.x_scores_
+    pls_df = pd.DataFrame(data=pls_scores, columns=["PLS1", "PLS2"])
+    pls_df["Label"] = labels.values
 
-        fig_plsda = px.scatter(pls_df, x="PLS1", y="PLS2", color="Label", title="PLS-DA Score Plot")
-        st.plotly_chart(fig_plsda)
+    fig_plsda = px.scatter(pls_df, x="PLS1", y="PLS2", color="Label", title="PLS-DA Score Plot")
+    st.plotly_chart(fig_plsda)
 
-        # Logistic Regression Classifier
-        st.subheader("Classification using Logistic Regression")
-        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
-        model = LogisticRegression(max_iter=1000)
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+    # Variable Importance in Projection (VIP)
+    st.subheader("Variable Importance (VIP) Scores")
+    t = pls.x_scores_
+    w = pls.x_weights_
+    q = pls.y_loadings_
+    p, h = w.shape
+    vips = np.zeros((p,))
+    s = np.diag(t.T @ t @ q.T @ q).reshape(h, -1)
+    total_s = np.sum(s)
+    for i in range(p):
+        weight = np.array([(w[i, j] / np.linalg.norm(w[:, j])) ** 2 for j in range(h)])
+        vips[i] = np.sqrt(p * (s.T @ weight) / total_s)
+    vip_scores = pd.Series(vips, index=features.columns)
+    st.dataframe(vip_scores.sort_values(ascending=False).reset_index().rename(columns={"index": "Variable", 0: "VIP Score"}))
 
-        st.text("Classification Report:")
-        st.text(classification_report(y_test, y_pred, target_names=label_encoder.classes_))
+    # Logistic Regression Classifier
+    st.subheader("Classification using Logistic Regression")
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
 
-        st.text("Confusion Matrix:")
-        cm = confusion_matrix(y_test, y_pred)
-        fig_cm = go.Figure(data=go.Heatmap(z=cm, x=label_encoder.classes_, y=label_encoder.classes_,
-                                           colorscale='Blues', showscale=True))
-        fig_cm.update_layout(title="Confusion Matrix", xaxis_title="Predicted", yaxis_title="Actual")
-        st.plotly_chart(fig_cm)
+    st.text("Classification Report:")
+    st.text(classification_report(y_test, y_pred, target_names=label_encoder.classes_))
+
+    st.text("Confusion Matrix:")
+    cm = confusion_matrix(y_test, y_pred)
+    fig_cm = go.Figure(data=go.Heatmap(z=cm, x=label_encoder.classes_, y=label_encoder.classes_,
+                                       colorscale='Blues', showscale=True))
+    fig_cm.update_layout(title="Confusion Matrix (Test Set)", xaxis_title="Predicted", yaxis_title="Actual")
+    st.plotly_chart(fig_cm)
+
+    # Cross-validation
+    st.subheader("Cross-Validation Accuracy")
+    scores = cross_val_score(model, X_scaled, y_encoded, cv=5)
+    st.write(f"Average Accuracy: {scores.mean():.2f} ± {scores.std():.2f}")
+
+    # Confusion Matrix from Cross-Validation
+    st.subheader("Cross-Validation Confusion Matrix")
+    y_cv_pred = cross_val_predict(model, X_scaled, y_encoded, cv=5)
+    cm_cv = confusion_matrix(y_encoded, y_cv_pred)
+    fig_cm_cv = go.Figure(data=go.Heatmap(z=cm_cv, x=label_encoder.classes_, y=label_encoder.classes_,
+                                          colorscale='Purples', showscale=True))
+    fig_cm_cv.update_layout(title="Confusion Matrix (Cross-Validation)", xaxis_title="Predicted", yaxis_title="Actual")
+    st.plotly_chart(fig_cm_cv)
