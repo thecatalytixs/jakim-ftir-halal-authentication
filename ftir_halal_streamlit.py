@@ -81,7 +81,7 @@ if st.session_state.authenticated:
     if st.sidebar.button("Sign Out"):
         st.session_state.authenticated = False
         st.session_state.user_email = ""
-        st.experimental_rerun()
+        st.rerun()
 
 # Main App
 st.title("FTIR-Based Halal Authentication Platform")
