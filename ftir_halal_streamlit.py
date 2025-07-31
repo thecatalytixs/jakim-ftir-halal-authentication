@@ -100,17 +100,19 @@ else:
     st.write(f"Welcome {st.session_state.user_email}! Upload your dataset to begin analysis.")
 
     # Example modules based on role
-    if st.session_state.user_role == "Admin" or st.session_state.user_role == "Standard User":
-        # Activate main features
-        import principal_component_analysis.pca_module as pca_module
-        import plsdapackage.plsda_module as plsda_module
-        import cluster_analysis.cluster_module as cluster_module
-        import preprocessing.preprocessing_module as prep_module
+    if st.session_state.user_role in ["Admin", "Standard User"]:
+        try:
+            import principal_component_analysis.pca_module as pca_module
+            import plsdapackage.plsda_module as plsda_module
+            import cluster_analysis.cluster_module as cluster_module
+            import preprocessing.preprocessing_module as prep_module
 
-        prep_module.run()
-        pca_module.run()
-        plsda_module.run()
-        cluster_module.run()
+            prep_module.run()
+            pca_module.run()
+            plsda_module.run()
+            cluster_module.run()
 
+        except ModuleNotFoundError as e:
+            st.error(f"Module not found: {e}. Please ensure all analysis modules are correctly named and placed.")
     else:
         st.warning("You do not have permission to access this feature.")
