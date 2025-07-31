@@ -37,24 +37,27 @@ with st.sidebar:
         signup_affiliation = st.text_input("Affiliation")
         signup_password = st.text_input("Password", type="password")
         if st.button("Register"):
-            user_data = {
-                "Email": signup_email,
-                "Full Name": signup_name,
-                "Contact Number": signup_contact,
-                "Affiliation": signup_affiliation,
-                "Password": hash_password(signup_password)
-            }
-            if os.path.exists(file_path):
-                existing_users = pd.read_csv(file_path)
-                if signup_email in existing_users['Email'].values:
-                    st.error("Email already registered. Please sign in.")
-                else:
-                    existing_users = pd.concat([existing_users, pd.DataFrame([user_data])], ignore_index=True)
-                    existing_users.to_csv(file_path, index=False)
-                    st.success("Registration successful!")
+            if not signup_email or not signup_name or not signup_contact or not signup_affiliation or not signup_password:
+                st.warning("Please fill in all fields to register.")
             else:
-                pd.DataFrame([user_data]).to_csv(file_path, index=False)
-                st.success("Registration successful!")
+                user_data = {
+                    "Email": signup_email,
+                    "Full Name": signup_name,
+                    "Contact Number": signup_contact,
+                    "Affiliation": signup_affiliation,
+                    "Password": hash_password(signup_password)
+                }
+                if os.path.exists(file_path):
+                    existing_users = pd.read_csv(file_path)
+                    if signup_email in existing_users['Email'].values:
+                        st.error("Email already registered. Please sign in.")
+                    else:
+                        existing_users = pd.concat([existing_users, pd.DataFrame([user_data])], ignore_index=True)
+                        existing_users.to_csv(file_path, index=False)
+                        st.success("Registration successful! Please sign in to continue.")
+                else:
+                    pd.DataFrame([user_data]).to_csv(file_path, index=False)
+                    st.success("Registration successful! Please sign in to continue.")
 
     elif auth_option == "Sign In":
         st.header("Sign In")
@@ -78,6 +81,10 @@ with st.sidebar:
         if os.path.exists(file_path):
             with open(file_path, "rb") as f:
                 st.download_button("📥 Download Registered Users", f, file_name="users.csv", mime="text/csv")
+
+if not user_logged_in:
+    st.warning("Please sign in to access the platform.")
+    st.stop()
 
 st.title("FTIR-Based Halal Authentication Platform")
 
