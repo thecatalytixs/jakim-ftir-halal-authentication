@@ -10,31 +10,34 @@ from sklearn.cross_decomposition import PLSRegression
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
-from supabase import create_client, Client
-import os
+import requests
+import json
 
 plt.style.use('default')
 
-# Supabase credentials
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Firebase Config
+FIREBASE_API_KEY = st.secrets["FIREBASE_API_KEY"]
+FIREBASE_AUTH_URL = f"https://identitytoolkit.googleapis.com/v1/accounts"
 
-# Sign in function
 def sign_in(email, password):
-    try:
-        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        return res
-    except Exception as e:
-        return None
+    payload = {
+        "email": email,
+        "password": password,
+        "returnSecureToken": True
+    }
+    url = f"{FIREBASE_AUTH_URL}:signInWithPassword?key={FIREBASE_API_KEY}"
+    res = requests.post(url, data=json.dumps(payload))
+    return res.json() if res.status_code == 200 else None
 
-# Sign up function
 def sign_up(email, password):
-    try:
-        res = supabase.auth.sign_up({"email": email, "password": password})
-        return res
-    except Exception as e:
-        return None
+    payload = {
+        "email": email,
+        "password": password,
+        "returnSecureToken": True
+    }
+    url = f"{FIREBASE_AUTH_URL}:signUp?key={FIREBASE_API_KEY}"
+    res = requests.post(url, data=json.dumps(payload))
+    return res.json() if res.status_code == 200 else None
 
 # Initialize session
 if "authenticated" not in st.session_state:
