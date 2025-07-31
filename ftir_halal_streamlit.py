@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import hashlib
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
@@ -11,15 +12,22 @@ import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import io
+import os
 
 # Force matplotlib to use light theme
 plt.style.use('default')
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 st.set_page_config(page_title="FTIR-Based Halal Authentication", layout="wide")
 
 # Sidebar for user authentication
 with st.sidebar:
     auth_option = st.radio("User Access", ["Sign In", "Sign Up"])
+
+    file_path = "users.csv"
+    user_logged_in = False
 
     if auth_option == "Sign Up":
         st.header("Create Account")
@@ -29,14 +37,47 @@ with st.sidebar:
         signup_affiliation = st.text_input("Affiliation")
         signup_password = st.text_input("Password", type="password")
         if st.button("Register"):
-            st.success("Registration successful! (Note: No backend connected)")
+            user_data = {
+                "Email": signup_email,
+                "Full Name": signup_name,
+                "Contact Number": signup_contact,
+                "Affiliation": signup_affiliation,
+                "Password": hash_password(signup_password)
+            }
+            if os.path.exists(file_path):
+                existing_users = pd.read_csv(file_path)
+                if signup_email in existing_users['Email'].values:
+                    st.error("Email already registered. Please sign in.")
+                else:
+                    existing_users = pd.concat([existing_users, pd.DataFrame([user_data])], ignore_index=True)
+                    existing_users.to_csv(file_path, index=False)
+                    st.success("Registration successful!")
+            else:
+                pd.DataFrame([user_data]).to_csv(file_path, index=False)
+                st.success("Registration successful!")
 
     elif auth_option == "Sign In":
         st.header("Sign In")
         signin_email = st.text_input("Email")
         signin_password = st.text_input("Password", type="password")
         if st.button("Login"):
-            st.success("Logged in! (Note: No backend connected)")
+            if os.path.exists(file_path):
+                users = pd.read_csv(file_path)
+                hashed_input_password = hash_password(signin_password)
+                if ((users['Email'] == signin_email) & (users['Password'] == hashed_input_password)).any():
+                    st.success("Login successful!")
+                    user_logged_in = True
+                else:
+                    st.error("Invalid email or password.")
+            else:
+                st.warning("No registered users found. Please sign up first.")
+
+    # Admin-only download button
+    if user_logged_in and signin_email == "your_admin_email@example.com":
+        st.markdown("### Developer Tools")
+        if os.path.exists(file_path):
+            with open(file_path, "rb") as f:
+                st.download_button("📥 Download Registered Users", f, file_name="users.csv", mime="text/csv")
 
 st.title("FTIR-Based Halal Authentication Platform")
 
