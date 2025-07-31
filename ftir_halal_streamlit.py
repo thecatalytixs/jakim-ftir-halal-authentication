@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import hashlib
+import sqlite3
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split, cross_val_predict
@@ -19,13 +20,25 @@ plt.style.use('default')
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
+# Initialize SQLite database
+conn = sqlite3.connect("users.db")
+c = conn.cursor()
+c.execute('''CREATE TABLE IF NOT EXISTS users (
+    email TEXT PRIMARY KEY,
+    full_name TEXT,
+    contact_number TEXT,
+    affiliation TEXT,
+    password TEXT,
+    role TEXT
+)''')
+conn.commit()
+
 st.set_page_config(page_title="FTIR-Based Halal Authentication", layout="wide")
 
 # Sidebar for user authentication
 with st.sidebar:
     auth_option = st.radio("User Access", ["Sign In", "Sign Up"])
 
-    file_path = "users.csv"
     if 'user_logged_in' not in st.session_state:
         st.session_state.user_logged_in = False
         st.session_state.user_email = ""
@@ -43,24 +56,13 @@ with st.sidebar:
             if not signup_email or not signup_name or not signup_contact or not signup_affiliation or not signup_password:
                 st.warning("Please fill in all fields to register.")
             else:
-                user_data = {
-                    "Email": signup_email,
-                    "Full Name": signup_name,
-                    "Contact Number": signup_contact,
-                    "Affiliation": signup_affiliation,
-                    "Password": hash_password(signup_password),
-                    "Role": signup_role
-                }
-                if os.path.exists(file_path):
-                    existing_users = pd.read_csv(file_path)
-                    if signup_email in existing_users['Email'].values:
-                        st.error("Email already registered. Please sign in.")
-                    else:
-                        existing_users = pd.concat([existing_users, pd.DataFrame([user_data])], ignore_index=True)
-                        existing_users.to_csv(file_path, index=False)
-                        st.success("Registration successful! Please sign in to continue.")
+                c.execute("SELECT * FROM users WHERE email = ?", (signup_email,))
+                if c.fetchone():
+                    st.error("Email already registered. Please sign in.")
                 else:
-                    pd.DataFrame([user_data]).to_csv(file_path, index=False)
+                    c.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)",
+                              (signup_email, signup_name, signup_contact, signup_affiliation, hash_password(signup_password), signup_role))
+                    conn.commit()
                     st.success("Registration successful! Please sign in to continue.")
 
     elif auth_option == "Sign In":
@@ -68,19 +70,15 @@ with st.sidebar:
         signin_email = st.text_input("Email")
         signin_password = st.text_input("Password", type="password")
         if st.button("Login"):
-            if os.path.exists(file_path):
-                users = pd.read_csv(file_path)
-                hashed_input_password = hash_password(signin_password)
-                user_match = users[(users['Email'] == signin_email) & (users['Password'] == hashed_input_password)]
-                if not user_match.empty:
-                    st.success("Login successful!")
-                    st.session_state.user_logged_in = True
-                    st.session_state.user_email = signin_email
-                    st.session_state.user_role = user_match.iloc[0]['Role'] if 'Role' in user_match.columns else "Standard User"
-                else:
-                    st.error("Invalid email or password.")
+            c.execute("SELECT * FROM users WHERE email = ? AND password = ?", (signin_email, hash_password(signin_password)))
+            user = c.fetchone()
+            if user:
+                st.success("Login successful!")
+                st.session_state.user_logged_in = True
+                st.session_state.user_email = signin_email
+                st.session_state.user_role = user[5]
             else:
-                st.warning("No registered users found. Please sign up first.")
+                st.error("Invalid email or password.")
 
     if st.session_state.user_logged_in:
         if st.button("Sign Out"):
@@ -91,9 +89,9 @@ with st.sidebar:
 
         if st.session_state.user_role == "Admin":
             st.markdown("### Developer Tools")
-            if os.path.exists(file_path):
-                with open(file_path, "rb") as f:
-                    st.download_button("\U0001F4C5 Download Registered Users", f, file_name="users.csv", mime="text/csv")
+            c.execute("SELECT * FROM users")
+            all_users = pd.DataFrame(c.fetchall(), columns=["Email", "Full Name", "Contact Number", "Affiliation", "Password", "Role"])
+            st.download_button("\U0001F4C5 Download Registered Users", all_users.to_csv(index=False), file_name="users.csv", mime="text/csv")
 
 # Main platform logic after successful login
 if st.session_state.user_logged_in:
