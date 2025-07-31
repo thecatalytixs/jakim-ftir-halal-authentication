@@ -18,7 +18,9 @@ plt.style.use('default')
 # Firebase Config
 FIREBASE_API_KEY = st.secrets["FIREBASE_API_KEY"]
 FIREBASE_AUTH_URL = f"https://identitytoolkit.googleapis.com/v1/accounts"
+FIREBASE_PROJECT_ID = st.secrets["FIREBASE_PROJECT_ID"]
 
+# Firebase Auth REST Functions
 def sign_in(email, password):
     payload = {
         "email": email,
@@ -37,7 +39,31 @@ def sign_up(email, password):
     }
     url = f"{FIREBASE_AUTH_URL}:signUp?key={FIREBASE_API_KEY}"
     res = requests.post(url, data=json.dumps(payload))
-    return res.json() if res.status_code == 200 else None
+    if res.status_code == 200:
+        user_data = res.json()
+        store_user_info(user_data["localId"], email)
+        return user_data
+    return None
+
+def store_user_info(uid, email):
+    url = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents/users?documentId={uid}"
+    headers = {
+        "Content-Type": "application/json"
+    }
+    data = {
+        "fields": {
+            "email": {"stringValue": email}
+        }
+    }
+    requests.post(url, headers=headers, data=json.dumps(data))
+
+def get_registered_users():
+    url = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents/users"
+    res = requests.get(url)
+    if res.status_code == 200:
+        docs = res.json().get("documents", [])
+        return [doc["fields"]["email"]["stringValue"] for doc in docs]
+    return []
 
 # Initialize session
 if "authenticated" not in st.session_state:
@@ -90,6 +116,13 @@ if not st.session_state.authenticated:
     st.write("Welcome to the FTIR Halal Authentication tools. Please sign in to continue.")
 else:
     st.write(f"Welcome {st.session_state.user_email}! Upload your dataset to begin analysis.")
+
+    if st.session_state.user_email == "thecatalytixs@gmail.com":
+        if st.button("Show Registered Users"):
+            users = get_registered_users()
+            st.write("### Registered Users:")
+            for i, email in enumerate(users, 1):
+                st.write(f"{i}. {email}")
 
     uploaded_file = st.file_uploader("Upload your FTIR dataset (CSV format only)", type=["csv"])
 
