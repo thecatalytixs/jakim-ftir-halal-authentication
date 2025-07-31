@@ -43,7 +43,7 @@ if "authenticated" not in st.session_state:
 
 # Sidebar - Login/Signup
 st.sidebar.title("User Access")
-access_mode = st.sidebar.radio("", ("Sign In", "Sign Up"))
+access_mode = st.sidebar.radio("Access Mode", ("Sign In", "Sign Up"), label_visibility="collapsed")
 
 if access_mode == "Sign In":
     st.sidebar.subheader("Sign In")
