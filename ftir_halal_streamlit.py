@@ -31,6 +31,13 @@ if uploaded_file is not None:
     label_encoder = LabelEncoder()
     y_encoded = label_encoder.fit_transform(labels)
 
+    # Ensure features are numeric
+    try:
+        features = features.apply(pd.to_numeric)
+    except ValueError:
+        st.error("All feature columns must be numeric. Please check your data.")
+        st.stop()
+
     # Standardize features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(features)
