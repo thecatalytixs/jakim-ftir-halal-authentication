@@ -94,16 +94,24 @@ with st.sidebar:
             st.session_state.user_role = ""
             st.experimental_rerun()
 
-    if st.session_state.user_logged_in and st.session_state.user_role == "Admin":
-        st.markdown("### Developer Tools")
-        if os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                st.download_button("📥 Download Registered Users", f, file_name="users.csv", mime="text/csv")
+        if st.session_state.user_role == "Admin":
+            st.markdown("### Developer Tools")
+            if os.path.exists(file_path):
+                with open(file_path, "rb") as f:
+                    st.download_button("📥 Download Registered Users", f, file_name="users.csv", mime="text/csv")
 
-if not st.session_state.user_logged_in:
+# Main platform logic after successful login
+if st.session_state.user_logged_in:
+    st.title("FTIR-Based Halal Authentication Platform")
+
+    # Optional: Show admin tools again (if needed)
+    if st.session_state.user_role == "Admin":
+        st.subheader("🔧 Admin Access")
+        # Additional admin features can go here
+
+    # Main content for both Admin and Standard User
+    st.write("Welcome to the FTIR Halal Authentication tools. Upload your dataset to begin analysis.")
+    # TODO: Insert analysis modules like PCA, PLSDA, etc. here
+
+else:
     st.warning("Please sign in to access the platform.")
-    st.stop()
-
-st.title("FTIR-Based Halal Authentication Platform")
-
-# Remaining platform logic continues here...
