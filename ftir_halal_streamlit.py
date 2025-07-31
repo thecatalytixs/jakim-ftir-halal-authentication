@@ -4,18 +4,18 @@ import numpy as np
 import hashlib
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_predict
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.cross_decomposition import PLSRegression
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
-import io
 import os
 
 plt.style.use('default')
 
+# Hash password function
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -106,41 +106,52 @@ if st.session_state.user_logged_in:
         st.subheader("Dataset Preview")
         st.dataframe(df)
 
-        if st.button("Run PCA"):
-            numeric_df = df.select_dtypes(include=[np.number]).dropna()
-            scaler = StandardScaler()
-            scaled_data = scaler.fit_transform(numeric_df)
-            pca = PCA(n_components=2)
-            principal_components = pca.fit_transform(scaled_data)
-            pc_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
-            fig = px.scatter(pc_df, x='PC1', y='PC2', title="PCA Plot")
-            st.plotly_chart(fig)
+        numeric_df = df.select_dtypes(include=[np.number]).dropna()
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(numeric_df)
 
-        if st.button("Run PLS-DA"):
-            label_col = st.selectbox("Select Label Column", df.columns)
-            df_clean = df.dropna()
-            X = df_clean.drop(label_col, axis=1).select_dtypes(include=[np.number])
-            y = LabelEncoder().fit_transform(df_clean[label_col])
-            pls = PLSRegression(n_components=2)
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
-            pls.fit(X_train, y_train)
-            X_scores = pls.transform(X_test)
-            fig = px.scatter(x=X_scores[:,0], y=X_scores[:,1], color=y_test.astype(str), title="PLS-DA Plot")
-            st.plotly_chart(fig)
+        # PCA with 3 components
+        pca = PCA(n_components=3)
+        principal_components = pca.fit_transform(X_scaled)
+        pc_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2', 'PC3'])
 
-        if st.button("Run Logistic Regression"):
-            label_col = st.selectbox("Select Target Column", df.columns)
-            df_clean = df.dropna()
-            X = df_clean.drop(label_col, axis=1).select_dtypes(include=[np.number])
-            y = LabelEncoder().fit_transform(df_clean[label_col])
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
-            model = LogisticRegression(max_iter=1000)
-            model.fit(X_train, y_train)
-            y_pred = model.predict(X_test)
-            st.text("Confusion Matrix:")
-            st.write(confusion_matrix(y_test, y_pred))
-            st.text("Classification Report:")
-            st.text(classification_report(y_test, y_pred))
+        show_labels = st.checkbox("Show Sample IDs (PCA)", value=True)
+        if 'SampleID' in df.columns and show_labels:
+            pc_df['SampleID'] = df['SampleID']
+            fig = px.scatter_3d(pc_df, x='PC1', y='PC2', z='PC3', text='SampleID', title="PCA 3D Biplot")
+        else:
+            fig = px.scatter_3d(pc_df, x='PC1', y='PC2', z='PC3', title="PCA 3D Biplot")
+        st.plotly_chart(fig)
+
+        # PLS-DA
+        label_col = st.selectbox("Select Label Column (PLS-DA)", df.columns)
+        df_clean = df.dropna()
+        X = df_clean.drop(label_col, axis=1).select_dtypes(include=[np.number])
+        y = df_clean[label_col]
+        label_encoder = LabelEncoder()
+        y_encoded = label_encoder.fit_transform(y)
+        X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.3, random_state=42)
+        pls = PLSRegression(n_components=3)
+        pls.fit(X_train, y_train)
+        y_pred_train = pls.predict(X_train)
+        y_pred_train_labels = np.round(y_pred_train).astype(int).flatten()
+        y_pred_train_labels = np.clip(y_pred_train_labels, 0, len(label_encoder.classes_) - 1)
+        y_pred_train_class = label_encoder.inverse_transform(y_pred_train_labels)
+        y_train_class = label_encoder.inverse_transform(y_train)
+        st.markdown("#### PLS-DA Classification Report (Training Set)")
+        report_df = pd.DataFrame(classification_report(y_train_class, y_pred_train_class, output_dict=True)).transpose()
+        st.dataframe(report_df.style.set_properties(**{'text-align': 'left'}))
+
+        X_scores = pls.transform(X)
+        show_pls_labels = st.checkbox("Show Sample IDs (PLS-DA)", value=False)
+        pls_df = pd.DataFrame(X_scores, columns=['PLS1', 'PLS2', 'PLS3'])
+        pls_df['Label'] = label_encoder.inverse_transform(y_encoded)
+        if 'SampleID' in df.columns and show_pls_labels:
+            pls_df['SampleID'] = df['SampleID']
+            fig_pls = px.scatter_3d(pls_df, x='PLS1', y='PLS2', z='PLS3', color='Label', text='SampleID', title="PLS-DA Observation Plot")
+        else:
+            fig_pls = px.scatter_3d(pls_df, x='PLS1', y='PLS2', z='PLS3', color='Label', title="PLS-DA Observation Plot")
+        st.plotly_chart(fig_pls)
 
 else:
     st.warning("Please sign in to access the platform.")
