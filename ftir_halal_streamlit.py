@@ -1,155 +1,116 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import hashlib
-import sqlite3
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split, cross_val_predict
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import confusion_matrix, classification_report
-from sklearn.cross_decomposition import PLSRegression
-import plotly.express as px
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
 import os
 
-plt.style.use('default')
+# Load users data
+def load_users():
+    if os.path.exists("users.csv"):
+        return pd.read_csv("users.csv")
+    else:
+        return pd.DataFrame(columns=["Email", "Full Name", "Contact Number", "Affiliation", "Password", "Role"])
 
-# Hash password function
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+# Save new user
+def save_user(email, full_name, contact, affiliation, password, role):
+    users = load_users()
+    new_user = pd.DataFrame({
+        "Email": [email],
+        "Full Name": [full_name],
+        "Contact Number": [contact],
+        "Affiliation": [affiliation],
+        "Password": [hashlib.sha256(password.encode()).hexdigest()],
+        "Role": [role]
+    })
+    users = pd.concat([users, new_user], ignore_index=True)
+    users.to_csv("users.csv", index=False)
 
-# Initialize SQLite database
-conn = sqlite3.connect("users.db")
-c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS users (
-    email TEXT PRIMARY KEY,
-    full_name TEXT,
-    contact_number TEXT,
-    affiliation TEXT,
-    password TEXT,
-    role TEXT
-)''')
-conn.commit()
+# Verify user credentials
+def verify_user(email, password):
+    users = load_users()
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    user_match = users[(users["Email"].str.lower() == email.lower()) & (users["Password"] == password_hash)]
+    if not user_match.empty:
+        return user_match.iloc[0].to_dict()
+    return None
 
-st.set_page_config(page_title="FTIR-Based Halal Authentication", layout="wide")
+# Initialize session
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.user_email = ""
+    st.session_state.user_role = ""
 
-# Sidebar for user authentication
-with st.sidebar:
-    auth_option = st.radio("User Access", ["Sign In", "Sign Up"])
+# Sidebar - Login/Signup
+st.sidebar.title("User Access")
+access_mode = st.sidebar.radio("", ("Sign In", "Sign Up"))
 
-    if 'user_logged_in' not in st.session_state:
-        st.session_state.user_logged_in = False
+if access_mode == "Sign In":
+    st.sidebar.subheader("Sign In")
+    login_email = st.sidebar.text_input("Email")
+    login_password = st.sidebar.text_input("Password", type="password")
+    if st.sidebar.button("Login"):
+        user = verify_user(login_email, login_password)
+        if user:
+            st.session_state.authenticated = True
+            st.session_state.user_email = user["Email"]
+            st.session_state.user_role = user["Role"]
+            st.sidebar.success("Login successful!")
+        else:
+            st.sidebar.error("Invalid email or password.")
+
+elif access_mode == "Sign Up":
+    st.sidebar.subheader("Create Account")
+    signup_email = st.sidebar.text_input("Email")
+    signup_name = st.sidebar.text_input("Full Name")
+    signup_contact = st.sidebar.text_input("Contact Number")
+    signup_affiliation = st.sidebar.text_input("Affiliation")
+    signup_password = st.sidebar.text_input("Password", type="password")
+
+    # Role restriction logic
+    if signup_email.strip().lower() == "thecatalytixs@gmail.com":
+        signup_role = "Admin"
+    else:
+        signup_role = "Standard User"
+    st.sidebar.text(f"Assigned Role: {signup_role}")
+
+    if st.sidebar.button("Register"):
+        if signup_email and signup_name and signup_contact and signup_affiliation and signup_password:
+            users = load_users()
+            if signup_email.lower() in users["Email"].str.lower().values:
+                st.sidebar.error("User already exists.")
+            else:
+                save_user(signup_email, signup_name, signup_contact, signup_affiliation, signup_password, signup_role)
+                st.sidebar.success("User registered successfully!")
+        else:
+            st.sidebar.error("Please fill in all fields.")
+
+# Sign out button
+if st.session_state.authenticated:
+    if st.sidebar.button("Sign Out"):
+        st.session_state.authenticated = False
         st.session_state.user_email = ""
         st.session_state.user_role = ""
+        st.experimental_rerun()
 
-    if auth_option == "Sign Up":
-        st.header("Create Account")
-        signup_email = st.text_input("Email")
-        signup_name = st.text_input("Full Name")
-        signup_contact = st.text_input("Contact Number")
-        signup_affiliation = st.text_input("Affiliation")
-        signup_password = st.text_input("Password", type="password")
-        signup_role = st.selectbox("Select Role", ["Standard User", "Admin"])
-        if st.button("Register"):
-            if not signup_email or not signup_name or not signup_contact or not signup_affiliation or not signup_password:
-                st.warning("Please fill in all fields to register.")
-            else:
-                c.execute("SELECT * FROM users WHERE email = ?", (signup_email,))
-                if c.fetchone():
-                    st.error("Email already registered. Please sign in.")
-                else:
-                    c.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)",
-                              (signup_email, signup_name, signup_contact, signup_affiliation, hash_password(signup_password), signup_role))
-                    conn.commit()
-                    st.success("Registration successful! Please sign in to continue.")
+# Main app functionality
+st.title("FTIR-Based Halal Authentication Platform")
 
-    elif auth_option == "Sign In":
-        st.header("Sign In")
-        signin_email = st.text_input("Email")
-        signin_password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            c.execute("SELECT * FROM users WHERE email = ? AND password = ?", (signin_email, hash_password(signin_password)))
-            user = c.fetchone()
-            if user:
-                st.success("Login successful!")
-                st.session_state.user_logged_in = True
-                st.session_state.user_email = signin_email
-                st.session_state.user_role = user[5]
-            else:
-                st.error("Invalid email or password.")
-
-    if st.session_state.user_logged_in:
-        if st.button("Sign Out"):
-            st.session_state.user_logged_in = False
-            st.session_state.user_email = ""
-            st.session_state.user_role = ""
-            st.experimental_rerun()
-
-        if st.session_state.user_role == "Admin":
-            st.markdown("### Developer Tools")
-            c.execute("SELECT * FROM users")
-            all_users = pd.DataFrame(c.fetchall(), columns=["Email", "Full Name", "Contact Number", "Affiliation", "Password", "Role"])
-            st.download_button("\U0001F4C5 Download Registered Users", all_users.to_csv(index=False), file_name="users.csv", mime="text/csv")
-
-# Main platform logic after successful login
-if st.session_state.user_logged_in:
-    st.title("FTIR-Based Halal Authentication Platform")
-
-    uploaded_file = st.file_uploader("Upload your dataset (.csv)", type="csv")
-
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        st.subheader("Dataset Preview")
-        st.dataframe(df)
-
-        numeric_df = df.select_dtypes(include=[np.number]).dropna()
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(numeric_df)
-
-        # PCA with 3 components
-        pca = PCA(n_components=3)
-        principal_components = pca.fit_transform(X_scaled)
-        pc_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2', 'PC3'])
-
-        show_labels = st.checkbox("Show Sample IDs (PCA)", value=True)
-        if 'SampleID' in df.columns and show_labels:
-            pc_df['SampleID'] = df['SampleID']
-            fig = px.scatter_3d(pc_df, x='PC1', y='PC2', z='PC3', text='SampleID', title="PCA 3D Biplot")
-        else:
-            fig = px.scatter_3d(pc_df, x='PC1', y='PC2', z='PC3', title="PCA 3D Biplot")
-        st.plotly_chart(fig)
-
-        # PLS-DA
-        label_col = st.selectbox("Select Label Column (PLS-DA)", df.columns)
-        df_clean = df.dropna()
-        X = df_clean.drop(label_col, axis=1).select_dtypes(include=[np.number])
-        y = df_clean[label_col]
-        label_encoder = LabelEncoder()
-        y_encoded = label_encoder.fit_transform(y)
-        X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.3, random_state=42)
-        pls = PLSRegression(n_components=3)
-        pls.fit(X_train, y_train)
-        y_pred_train = pls.predict(X_train)
-        y_pred_train_labels = np.round(y_pred_train).astype(int).flatten()
-        y_pred_train_labels = np.clip(y_pred_train_labels, 0, len(label_encoder.classes_) - 1)
-        y_pred_train_class = label_encoder.inverse_transform(y_pred_train_labels)
-        y_train_class = label_encoder.inverse_transform(y_train)
-        st.markdown("#### PLS-DA Classification Report (Training Set)")
-        report_df = pd.DataFrame(classification_report(y_train_class, y_pred_train_class, output_dict=True)).transpose()
-        st.dataframe(report_df.style.set_properties(**{'text-align': 'left'}))
-
-        X_scores = pls.transform(X)
-        show_pls_labels = st.checkbox("Show Sample IDs (PLS-DA)", value=False)
-        pls_df = pd.DataFrame(X_scores, columns=['PLS1', 'PLS2', 'PLS3'])
-        pls_df['Label'] = label_encoder.inverse_transform(y_encoded)
-        if 'SampleID' in df.columns and show_pls_labels:
-            pls_df['SampleID'] = df['SampleID']
-            fig_pls = px.scatter_3d(pls_df, x='PLS1', y='PLS2', z='PLS3', color='Label', text='SampleID', title="PLS-DA Observation Plot")
-        else:
-            fig_pls = px.scatter_3d(pls_df, x='PLS1', y='PLS2', z='PLS3', color='Label', title="PLS-DA Observation Plot")
-        st.plotly_chart(fig_pls)
-
+if not st.session_state.authenticated:
+    st.write("Welcome to the FTIR Halal Authentication tools. Please sign in to continue.")
 else:
-    st.warning("Please sign in to access the platform.")
+    st.write(f"Welcome {st.session_state.user_email}! Upload your dataset to begin analysis.")
+
+    # Example modules based on role
+    if st.session_state.user_role == "Admin" or st.session_state.user_role == "Standard User":
+        # Activate main features
+        import principal_component_analysis.pca_module as pca_module
+        import plsdapackage.plsda_module as plsda_module
+        import cluster_analysis.cluster_module as cluster_module
+        import preprocessing.preprocessing_module as prep_module
+
+        prep_module.run()
+        pca_module.run()
+        plsda_module.run()
+        cluster_module.run()
+
+    else:
+        st.warning("You do not have permission to access this feature.")
