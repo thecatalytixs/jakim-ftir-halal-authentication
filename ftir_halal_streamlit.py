@@ -15,8 +15,30 @@ import io
 # Force matplotlib to use light theme
 plt.style.use('default')
 
-st.set_page_config(page_title="Halal Authentication Platform", layout="wide")
-st.title("Halal Authentication Platform")
+st.set_page_config(page_title="FTIR-Based Halal Authentication", layout="wide")
+
+# Sidebar for user authentication
+with st.sidebar:
+    auth_option = st.radio("User Access", ["Sign In", "Sign Up"])
+
+    if auth_option == "Sign Up":
+        st.header("Create Account")
+        signup_email = st.text_input("Email")
+        signup_name = st.text_input("Full Name")
+        signup_contact = st.text_input("Contact Number")
+        signup_affiliation = st.text_input("Affiliation")
+        signup_password = st.text_input("Password", type="password")
+        if st.button("Register"):
+            st.success("Registration successful! (Note: No backend connected)")
+
+    elif auth_option == "Sign In":
+        st.header("Sign In")
+        signin_email = st.text_input("Email")
+        signin_password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            st.success("Logged in! (Note: No backend connected)")
+
+st.title("FTIR-Based Halal Authentication Platform")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload your FTIR dataset (CSV format only)", type=["csv"])
@@ -110,49 +132,3 @@ else:
     fig_pls = px.scatter_3d(pls_df, x="PLS1", y="PLS2", z="PLS3", color="Class", title="PLS-DA Observation Plot (3D)")
 
 st.plotly_chart(fig_pls, use_container_width=True)
-
-# PLS-DA Classification Report (Full Set)
-y_pred_pls = pls.predict(X_scaled)
-y_pred_labels = np.round(y_pred_pls).astype(int).flatten()
-y_pred_labels = np.clip(y_pred_labels, 0, len(label_encoder.classes_) - 1)
-y_pred_classes = label_encoder.inverse_transform(y_pred_labels)
-
-report_dict = classification_report(y, y_pred_classes, output_dict=True)
-report_df = pd.DataFrame(report_dict).transpose().round(2)
-st.markdown("**Classification Report (Training Set via PLS-DA):**")
-st.dataframe(report_df, use_container_width=True)
-
-pls_conf_matrix = confusion_matrix(y, y_pred_classes)
-st.markdown("**Confusion Matrix (Training Set via PLS-DA):**")
-st.dataframe(pd.DataFrame(pls_conf_matrix, index=label_encoder.classes_, columns=label_encoder.classes_))
-
-# PLS-DA VIP Scores
-T = pls.x_scores_
-W = pls.x_weights_
-Q = pls.y_loadings_
-p, h = W.shape
-SStotal = np.sum(np.square(T), axis=0) * np.square(Q).flatten()
-vip = np.sqrt(p * np.sum((W**2) * SStotal.reshape(1, -1), axis=1) / np.sum(SStotal))
-
-vip_df = pd.DataFrame({'Variable': X.columns, 'VIP_Score': vip})
-vip_df = vip_df.sort_values(by='VIP_Score', ascending=False)
-
-fig_vip = px.bar(vip_df.head(20), x='Variable', y='VIP_Score', title='Top 20 VIP Scores')
-st.plotly_chart(fig_vip, use_container_width=True)
-st.dataframe(vip_df)
-
-# Classification with Logistic Regression (Test Set)
-st.subheader("6. Logistic Regression Classification (Test Set)")
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
-model = LogisticRegression()
-model.fit(X_train, y_train)
-y_pred_test = model.predict(X_test)
-
-report_dict_test = classification_report(y_test, y_pred_test, target_names=label_encoder.classes_, output_dict=True)
-report_df_test = pd.DataFrame(report_dict_test).transpose().round(2)
-st.markdown("**Classification Report (Test Set):**")
-st.dataframe(report_df_test, use_container_width=True)
-
-conf_matrix_test = confusion_matrix(y_test, y_pred_test)
-st.markdown("**Confusion Matrix (Test Set):**")
-st.dataframe(pd.DataFrame(conf_matrix_test, index=label_encoder.classes_, columns=label_encoder.classes_))
