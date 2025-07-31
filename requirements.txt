@@ -6,5 +6,4 @@ plotly
 matplotlib
 reportlab
 kaleido
-supabase
-supabase-py
+
