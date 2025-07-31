@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 import io
 import os
 
-# Force matplotlib to use light theme
 plt.style.use('default')
 
 def hash_password(password):
@@ -77,11 +76,7 @@ with st.sidebar:
                     st.success("Login successful!")
                     st.session_state.user_logged_in = True
                     st.session_state.user_email = signin_email
-                    if 'Role' in user_match.columns:
-                        st.session_state.user_role = user_match.iloc[0].get('Role', 'Standard User')
-                    else:
-                        st.error("User role column is missing. Please check the users.csv file structure.")
-                        st.stop()
+                    st.session_state.user_role = user_match.iloc[0]['Role'] if 'Role' in user_match.columns else "Standard User"
                 else:
                     st.error("Invalid email or password.")
             else:
@@ -98,20 +93,54 @@ with st.sidebar:
             st.markdown("### Developer Tools")
             if os.path.exists(file_path):
                 with open(file_path, "rb") as f:
-                    st.download_button("📥 Download Registered Users", f, file_name="users.csv", mime="text/csv")
+                    st.download_button("\U0001F4C5 Download Registered Users", f, file_name="users.csv", mime="text/csv")
 
 # Main platform logic after successful login
 if st.session_state.user_logged_in:
     st.title("FTIR-Based Halal Authentication Platform")
 
-    # Optional: Show admin tools again (if needed)
-    if st.session_state.user_role == "Admin":
-        st.subheader("🔧 Admin Access")
-        # Additional admin features can go here
+    uploaded_file = st.file_uploader("Upload your dataset (.csv)", type="csv")
 
-    # Main content for both Admin and Standard User
-    st.write("Welcome to the FTIR Halal Authentication tools. Upload your dataset to begin analysis.")
-    # TODO: Insert analysis modules like PCA, PLSDA, etc. here
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.subheader("Dataset Preview")
+        st.dataframe(df)
+
+        if st.button("Run PCA"):
+            numeric_df = df.select_dtypes(include=[np.number]).dropna()
+            scaler = StandardScaler()
+            scaled_data = scaler.fit_transform(numeric_df)
+            pca = PCA(n_components=2)
+            principal_components = pca.fit_transform(scaled_data)
+            pc_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
+            fig = px.scatter(pc_df, x='PC1', y='PC2', title="PCA Plot")
+            st.plotly_chart(fig)
+
+        if st.button("Run PLS-DA"):
+            label_col = st.selectbox("Select Label Column", df.columns)
+            df_clean = df.dropna()
+            X = df_clean.drop(label_col, axis=1).select_dtypes(include=[np.number])
+            y = LabelEncoder().fit_transform(df_clean[label_col])
+            pls = PLSRegression(n_components=2)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+            pls.fit(X_train, y_train)
+            X_scores = pls.transform(X_test)
+            fig = px.scatter(x=X_scores[:,0], y=X_scores[:,1], color=y_test.astype(str), title="PLS-DA Plot")
+            st.plotly_chart(fig)
+
+        if st.button("Run Logistic Regression"):
+            label_col = st.selectbox("Select Target Column", df.columns)
+            df_clean = df.dropna()
+            X = df_clean.drop(label_col, axis=1).select_dtypes(include=[np.number])
+            y = LabelEncoder().fit_transform(df_clean[label_col])
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+            model = LogisticRegression(max_iter=1000)
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            st.text("Confusion Matrix:")
+            st.write(confusion_matrix(y_test, y_pred))
+            st.text("Classification Report:")
+            st.text(classification_report(y_test, y_pred))
 
 else:
     st.warning("Please sign in to access the platform.")
