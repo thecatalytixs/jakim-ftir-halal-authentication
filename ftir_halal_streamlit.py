@@ -27,7 +27,10 @@ with st.sidebar:
     auth_option = st.radio("User Access", ["Sign In", "Sign Up"])
 
     file_path = "users.csv"
-    user_logged_in = False
+    if 'user_logged_in' not in st.session_state:
+        st.session_state.user_logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.user_role = ""
 
     if auth_option == "Sign Up":
         st.header("Create Account")
@@ -36,6 +39,7 @@ with st.sidebar:
         signup_contact = st.text_input("Contact Number")
         signup_affiliation = st.text_input("Affiliation")
         signup_password = st.text_input("Password", type="password")
+        signup_role = st.selectbox("Select Role", ["Standard User", "Admin"])
         if st.button("Register"):
             if not signup_email or not signup_name or not signup_contact or not signup_affiliation or not signup_password:
                 st.warning("Please fill in all fields to register.")
@@ -45,7 +49,8 @@ with st.sidebar:
                     "Full Name": signup_name,
                     "Contact Number": signup_contact,
                     "Affiliation": signup_affiliation,
-                    "Password": hash_password(signup_password)
+                    "Password": hash_password(signup_password),
+                    "Role": signup_role
                 }
                 if os.path.exists(file_path):
                     existing_users = pd.read_csv(file_path)
@@ -67,22 +72,31 @@ with st.sidebar:
             if os.path.exists(file_path):
                 users = pd.read_csv(file_path)
                 hashed_input_password = hash_password(signin_password)
-                if ((users['Email'] == signin_email) & (users['Password'] == hashed_input_password)).any():
+                user_match = users[(users['Email'] == signin_email) & (users['Password'] == hashed_input_password)]
+                if not user_match.empty:
                     st.success("Login successful!")
-                    user_logged_in = True
+                    st.session_state.user_logged_in = True
+                    st.session_state.user_email = signin_email
+                    st.session_state.user_role = user_match.iloc[0]['Role']
                 else:
                     st.error("Invalid email or password.")
             else:
                 st.warning("No registered users found. Please sign up first.")
 
-    # Admin-only download button
-    if user_logged_in and signin_email == "your_admin_email@example.com":
+    if st.session_state.user_logged_in:
+        if st.button("Sign Out"):
+            st.session_state.user_logged_in = False
+            st.session_state.user_email = ""
+            st.session_state.user_role = ""
+            st.experimental_rerun()
+
+    if st.session_state.user_logged_in and st.session_state.user_role == "Admin":
         st.markdown("### Developer Tools")
         if os.path.exists(file_path):
             with open(file_path, "rb") as f:
                 st.download_button("📥 Download Registered Users", f, file_name="users.csv", mime="text/csv")
 
-if not user_logged_in:
+if not st.session_state.user_logged_in:
     st.warning("Please sign in to access the platform.")
     st.stop()
 
