@@ -77,7 +77,11 @@ with st.sidebar:
                     st.success("Login successful!")
                     st.session_state.user_logged_in = True
                     st.session_state.user_email = signin_email
-                    st.session_state.user_role = user_match.iloc[0]['Role']
+                    if 'Role' in user_match.columns:
+                        st.session_state.user_role = user_match.iloc[0]['Role']
+                    else:
+                        st.error("User role column is missing. Please check the users.csv file structure.")
+                        st.stop()
                 else:
                     st.error("Invalid email or password.")
             else:
