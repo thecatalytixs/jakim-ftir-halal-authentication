@@ -31,11 +31,10 @@ def load_data(file):
     rng = np.random.default_rng(42)
     n_per_class = 40
     wnums = np.arange(4000, 650, -10)
-    p = len(wnums)
 
     def make_block(mu_shift):
-        base = rng.normal(0, 1, size=(n_per_class, p))
-        bumps_idx = rng.choice(np.arange(50, p - 50), size=4, replace=False)
+        base = rng.normal(0, 1, size=(n_per_class, len(wnums)))
+        bumps_idx = rng.choice(np.arange(50, len(wnums) - 50), size=4, replace=False)
         for b in bumps_idx:
             base[:, b - 3:b + 3] += mu_shift
         return base
@@ -55,6 +54,7 @@ def load_data(file):
 
 df = load_data(uploaded_file)
 
+# 1. Preview
 st.subheader("1. Preview of Uploaded Dataset")
 st.dataframe(df.head(), use_container_width=True)
 
@@ -73,8 +73,46 @@ y = df["Class"].copy()
 label_encoder = LabelEncoder()
 y_encoded = label_encoder.fit_transform(y)
 
-# PCA
-st.subheader("2. Principal Component Analysis PCA")
+# 2. KMO
+st.subheader("2. Kaiser Meyer Olkin test")
+
+def kmo_from_dataframe(df_features: pd.DataFrame):
+    Xz = (df_features - df_features.mean(axis=0)) / df_features.std(axis=0, ddof=0)
+    R = np.corrcoef(Xz.values, rowvar=False)
+    eps = 1e-6
+    R = R + np.eye(R.shape[0]) * eps
+    invR = np.linalg.pinv(R)
+    d = np.sqrt(np.diag(invR))
+    P = -invR / np.outer(d, d)
+    np.fill_diagonal(P, 0.0)
+    R_off = R.copy()
+    np.fill_diagonal(R_off, 0.0)
+    r2_sum = np.sum(R_off**2)
+    p2_sum = np.sum(P**2)
+    kmo_overall = r2_sum / (r2_sum + p2_sum)
+    r2_i = np.sum(R_off**2, axis=0)
+    p2_i = np.sum(P**2, axis=0)
+    msa = r2_i / (r2_i + p2_i)
+    return float(kmo_overall), pd.Series(msa, index=df_features.columns, name="MSA")
+
+kmo_value, msa_series = kmo_from_dataframe(X[feature_cols])
+
+def kmo_note(k):
+    if k >= 0.90: return "Marvelous"
+    if k >= 0.80: return "Meritorious"
+    if k >= 0.70: return "Middling"
+    if k >= 0.60: return "Mediocre"
+    if k >= 0.50: return "Acceptable"
+    return "Unacceptable"
+
+st.markdown(f"**Overall KMO:** {kmo_value:.3f}  ·  _{kmo_note(kmo_value)}_")
+msa_df = msa_series.reset_index()
+msa_df.columns = ["Variable", "MSA"]
+st.dataframe(msa_df.sort_values("MSA", ascending=False), use_container_width=True)
+st.caption("Rule of thumb KMO at least 0.50 indicates sampling adequacy for PCA or factor analysis. Variables with low MSA may be candidates for removal or checking.")
+
+# 3. PCA
+st.subheader("3. Principal Component Analysis PCA")
 n_pc = st.slider("Number of PCs", min_value=2, max_value=10, value=3, step=1)
 
 scaler_all = StandardScaler()
@@ -109,8 +147,8 @@ else:
     )
 st.plotly_chart(fig, use_container_width=True)
 
-# PCA loadings
-st.subheader("3. Variable Plot PCA Loadings")
+# 4. PCA loadings
+st.subheader("4. Variable Plot PCA Loadings")
 loadings = pd.DataFrame(pca.components_.T, columns=pca_cols, index=feature_cols)
 if n_pc >= 3:
     fig_loadings = px.scatter_3d(
@@ -124,8 +162,8 @@ else:
     )
 st.plotly_chart(fig_loadings, use_container_width=True)
 
-# PCA biplot
-st.subheader("4. PCA Biplot")
+# 5. PCA biplot
+st.subheader("5. PCA Biplot")
 fig_biplot = go.Figure()
 for label in pca_df["Class"].unique():
     subset = pca_df[pca_df["Class"] == label]
@@ -177,8 +215,8 @@ fig_biplot.update_layout(
 )
 st.plotly_chart(fig_biplot, use_container_width=True)
 
-# PLS scores plot for visual inspection
-st.subheader("5. PLS scores plot for visual inspection")
+# 6. PLS scores plot for visual inspection
+st.subheader("6. PLS scores plot for visual inspection")
 n_pls_vis = st.slider("Number of PLS components for plotting", min_value=2, max_value=10, value=3, step=1)
 
 pls_vis = PLSRegression(n_components=n_pls_vis)
@@ -204,16 +242,20 @@ else:
     )
 st.plotly_chart(fig_pls, use_container_width=True)
 
-# PLS DA classification with LOOCV simplified
-st.subheader("6. PLS DA classification with Leave One Out Cross Validation")
+# 7. PLS DA classification with LOOCV simplified
+st.subheader("7. PLS DA classification with Leave One Out Cross Validation")
 
 n_pls = st.slider("Number of PLS components for classification", min_value=2, max_value=10, value=3, step=1)
 
 loo = LeaveOneOut()
-y_true, y_pred = [], []
+y_true, y_pred = []
 
 X_np = X.values
 y_np = y_encoded.copy()
+
+# initialise lists properly
+y_true = []
+y_pred = []
 
 for train_idx, test_idx in loo.split(X_np):
     X_train, X_test = X_np[train_idx], X_np[test_idx]
@@ -246,8 +288,8 @@ conf_loo = confusion_matrix(y_true_labels, y_pred_labels, labels=label_encoder.c
 st.markdown("**Confusion Matrix LOOCV:**")
 st.dataframe(pd.DataFrame(conf_loo, index=label_encoder.classes_, columns=label_encoder.classes_))
 
-# VIP scores for exploration
-st.subheader("7. VIP Scores from PLS on all data for exploration")
+# 8. VIP scores for exploration
+st.subheader("8. VIP Scores from PLS on all data for exploration")
 pls_vip = PLSRegression(n_components=min(n_pls_vis, len(feature_cols)))
 pls_vip.fit(X_all_scaled, y_encoded)
 
@@ -274,8 +316,8 @@ with st.expander("Notes and practice guidance"):
         """
     )
 
-# External prediction using a final PLS DA model
-st.subheader("8. Predict classes for an external testing dataset")
+# 9. External prediction using a final PLS DA model
+st.subheader("9. Predict classes for an external testing dataset")
 st.caption("The model is trained on the entire dataset currently loaded above using the selected number of PLS components for classification")
 
 test_file = st.file_uploader("Upload external testing dataset CSV only", type=["csv"], key="external_test")
