@@ -28,7 +28,6 @@ def load_data(file):
     if os.path.exists(demo_path):
         return pd.read_csv(demo_path)
 
-    # Generate a realistic demo dataset if no file and no demo exist
     rng = np.random.default_rng(42)
     n_per_class = 40
     wnums = np.arange(4000, 650, -10)
@@ -237,15 +236,12 @@ for train_idx, test_idx in loo.split(X_np):
     y_true.append(y_test[0])
     y_pred.append(y_hat)
 
-# Convert to labels
 y_true_labels = label_encoder.inverse_transform(y_true)
 y_pred_labels = label_encoder.inverse_transform(y_pred)
 
-# Overall accuracy only
 acc_loo = accuracy_score(y_true_labels, y_pred_labels)
 st.markdown(f"**LOOCV PLS DA Accuracy:** {acc_loo:.3f}")
 
-# Confusion matrix only
 conf_loo = confusion_matrix(y_true_labels, y_pred_labels, labels=label_encoder.classes_)
 st.markdown("**Confusion Matrix LOOCV:**")
 st.dataframe(pd.DataFrame(conf_loo, index=label_encoder.classes_, columns=label_encoder.classes_))
@@ -277,3 +273,17 @@ with st.expander("Notes and practice guidance"):
         VIP shown here is exploratory since it is fitted on all samples
         """
     )
+
+# External prediction using a final PLS DA model
+st.subheader("8. Predict classes for an external testing dataset")
+st.caption("The model is trained on the entire dataset currently loaded above using the selected number of PLS components for classification")
+
+test_file = st.file_uploader("Upload external testing dataset CSV only", type=["csv"], key="external_test")
+
+if test_file is not None:
+    test_df_raw = pd.read_csv(test_file)
+    st.markdown("**Preview of testing dataset**")
+    st.dataframe(test_df_raw.head(), use_container_width=True)
+
+    if "SampleID" not in test_df_raw.columns:
+        st.warning("SampleID column not
