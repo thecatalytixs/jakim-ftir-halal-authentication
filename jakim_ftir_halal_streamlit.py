@@ -286,4 +286,65 @@ if test_file is not None:
     st.dataframe(test_df_raw.head(), use_container_width=True)
 
     if "SampleID" not in test_df_raw.columns:
-        st.warning("SampleID column not
+        st.warning("SampleID column not found in the testing file. A sequential SampleID will be created")
+        test_df_raw.insert(0, "SampleID", [f"T{i+1:03d}" for i in range(len(test_df_raw))])
+
+    missing_feats = [c for c in feature_cols if c not in test_df_raw.columns]
+    extra_feats = [c for c in test_df_raw.columns if c not in feature_cols + ["SampleID", "Class"]]
+
+    if len(missing_feats) > 0:
+        st.error(f"The testing file is missing required spectral variables. Missing columns count {len(missing_feats)}. Example missing columns: {missing_feats[:5]}")
+        st.stop()
+
+    X_test_pred = test_df_raw[feature_cols].copy()
+
+    for c in feature_cols:
+        X_test_pred[c] = pd.to_numeric(X_test_pred[c], errors="coerce")
+
+    train_feature_means = X[feature_cols].mean(axis=0)
+    X_test_pred = X_test_pred.fillna(train_feature_means)
+
+    scaler_final = StandardScaler()
+    X_all_scaled_final = scaler_final.fit_transform(X.values)
+
+    pls_final = PLSRegression(n_components=n_pls)
+    pls_final.fit(X_all_scaled_final, y_encoded)
+
+    X_all_pls_final = pls_final.transform(X_all_scaled_final)
+
+    clf_final = LogisticRegression(max_iter=500, solver="lbfgs")
+    clf_final.fit(X_all_pls_final, y_encoded)
+
+    X_test_scaled_final = scaler_final.transform(X_test_pred.values)
+    X_test_pls_final = pls_final.transform(X_test_scaled_final)
+
+    y_pred_labels_final = clf_final.predict(X_test_pls_final)
+    y_pred_names_final = label_encoder.inverse_transform(y_pred_labels_final)
+
+    proba = clf_final.predict_proba(X_test_pls_final)
+    proba_df = pd.DataFrame(proba, columns=[f"Prob_{c}" for c in label_encoder.classes_])
+
+    out_df = pd.concat(
+        [
+            test_df_raw[["SampleID"]].reset_index(drop=True),
+            pd.DataFrame({"Predicted_Class": y_pred_names_final}),
+            proba_df
+        ],
+        axis=1
+    )
+
+    st.markdown("**Predictions for testing dataset**")
+    st.dataframe(out_df, use_container_width=True)
+
+    st.download_button(
+        "Download predictions CSV",
+        out_df.to_csv(index=False).encode("utf-8"),
+        file_name="external_predictions_plsda.csv",
+        mime="text/csv"
+    )
+
+    if len(extra_feats) > 0:
+        with st.expander("Note about extra columns in testing file"):
+            st.write(
+                f"The following columns were ignored because they are not part of the training feature set. Example columns {extra_feats[:10]}"
+            )
