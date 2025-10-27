@@ -248,12 +248,11 @@ st.subheader("7. PLS DA classification with Leave One Out Cross Validation")
 n_pls = st.slider("Number of PLS components for classification", min_value=2, max_value=10, value=3, step=1)
 
 loo = LeaveOneOut()
-y_true, y_pred = []
 
 X_np = X.values
 y_np = y_encoded.copy()
 
-# initialise lists properly
+# initialise lists
 y_true = []
 y_pred = []
 
