@@ -5,19 +5,18 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import LeaveOneOut
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+from sklearn.metrics import confusion_matrix, accuracy_score
 from sklearn.cross_decomposition import PLSRegression
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
-import io
 import os
 
 plt.style.use('default')
 
 st.set_page_config(page_title="JAKIM FTIR Halal Authentication Platform", layout="wide")
 st.title("JAKIM FTIR Halal Authentication Platform")
-st.caption("Upload a CSV with columns SampleID Class and spectral variables such as 4000..400 cm⁻¹")
+st.caption("Upload a CSV with columns SampleID Class and spectral variables such as 4000 to 400 cm⁻¹")
 
 uploaded_file = st.file_uploader("Upload your FTIR dataset CSV only", type=["csv"])
 
@@ -28,6 +27,8 @@ def load_data(file):
     demo_path = "simulated_ftir_data.csv"
     if os.path.exists(demo_path):
         return pd.read_csv(demo_path)
+
+    # Generate a realistic demo dataset if no file and no demo exist
     rng = np.random.default_rng(42)
     n_per_class = 40
     wnums = np.arange(4000, 650, -10)
@@ -35,17 +36,17 @@ def load_data(file):
 
     def make_block(mu_shift):
         base = rng.normal(0, 1, size=(n_per_class, p))
-        bumps_idx = rng.choice(np.arange(50, p-50), size=4, replace=False)
+        bumps_idx = rng.choice(np.arange(50, p - 50), size=4, replace=False)
         for b in bumps_idx:
-            base[:, b-3:b+3] += mu_shift
+            base[:, b - 3:b + 3] += mu_shift
         return base
 
-    X_halal = make_block(1.2)
-    X_nonhalal = make_block(-1.0)
-    X_mix = make_block(0.4)
+    X_bovine = make_block(1.2)
+    X_porcine = make_block(-1.0)
+    X_fish = make_block(0.4)
 
-    X = np.vstack([X_halal, X_nonhalal, X_mix])
-    classes = (["Bovine"] * n_per_class) + (["Porcine"] * n_per_class) + (["Suspect"] * n_per_class)
+    X = np.vstack([X_bovine, X_porcine, X_fish])
+    classes = (["Bovine"] * n_per_class) + (["Porcine"] * n_per_class) + (["Fish"] * n_per_class)
     sample_ids = [f"S{i+1:03d}" for i in range(len(X))]
 
     df_demo = pd.DataFrame(X, columns=[f"{w}" for w in wnums])
@@ -73,6 +74,7 @@ y = df["Class"].copy()
 label_encoder = LabelEncoder()
 y_encoded = label_encoder.fit_transform(y)
 
+# PCA
 st.subheader("2. Principal Component Analysis PCA")
 n_pc = st.slider("Number of PCs", min_value=2, max_value=10, value=3, step=1)
 
@@ -108,6 +110,7 @@ else:
     )
 st.plotly_chart(fig, use_container_width=True)
 
+# PCA loadings
 st.subheader("3. Variable Plot PCA Loadings")
 loadings = pd.DataFrame(pca.components_.T, columns=pca_cols, index=feature_cols)
 if n_pc >= 3:
@@ -122,6 +125,7 @@ else:
     )
 st.plotly_chart(fig_loadings, use_container_width=True)
 
+# PCA biplot
 st.subheader("4. PCA Biplot")
 fig_biplot = go.Figure()
 for label in pca_df["Class"].unique():
@@ -146,9 +150,9 @@ scale = 3.0
 for i in range(loadings.shape[0]):
     if n_pc >= 3:
         fig_biplot.add_trace(go.Scatter3d(
-            x=[0, loadings.iloc[i, 0]*scale],
-            y=[0, loadings.iloc[i, 1]*scale],
-            z=[0, loadings.iloc[i, 2]*scale],
+            x=[0, loadings.iloc[i, 0] * scale],
+            y=[0, loadings.iloc[i, 1] * scale],
+            z=[0, loadings.iloc[i, 2] * scale],
             mode='lines+text',
             text=["", loadings.index[i]],
             name=loadings.index[i],
@@ -156,8 +160,8 @@ for i in range(loadings.shape[0]):
         ))
     else:
         fig_biplot.add_trace(go.Scatter(
-            x=[0, loadings.iloc[i, 0]*scale],
-            y=[0, loadings.iloc[i, 1]*scale],
+            x=[0, loadings.iloc[i, 0] * scale],
+            y=[0, loadings.iloc[i, 1] * scale],
             mode='lines+text',
             text=["", loadings.index[i]],
             name=loadings.index[i],
@@ -174,6 +178,7 @@ fig_biplot.update_layout(
 )
 st.plotly_chart(fig_biplot, use_container_width=True)
 
+# PLS scores plot for visual inspection
 st.subheader("5. PLS scores plot for visual inspection")
 n_pls_vis = st.slider("Number of PLS components for plotting", min_value=2, max_value=10, value=3, step=1)
 
@@ -200,12 +205,13 @@ else:
     )
 st.plotly_chart(fig_pls, use_container_width=True)
 
+# PLS DA classification with LOOCV simplified
 st.subheader("6. PLS DA classification with Leave One Out Cross Validation")
+
 n_pls = st.slider("Number of PLS components for classification", min_value=2, max_value=10, value=3, step=1)
 
 loo = LeaveOneOut()
 y_true, y_pred = [], []
-pred_rows = []
 
 X_np = X.values
 y_np = y_encoded.copy()
@@ -231,37 +237,20 @@ for train_idx, test_idx in loo.split(X_np):
     y_true.append(y_test[0])
     y_pred.append(y_hat)
 
-    pred_rows.append({
-        "SampleID": df.iloc[test_idx[0]]["SampleID"],
-        "True": label_encoder.inverse_transform([y_test[0]])[0],
-        "Pred": label_encoder.inverse_transform([y_hat])[0]
-    })
-
+# Convert to labels
 y_true_labels = label_encoder.inverse_transform(y_true)
 y_pred_labels = label_encoder.inverse_transform(y_pred)
 
+# Overall accuracy only
 acc_loo = accuracy_score(y_true_labels, y_pred_labels)
 st.markdown(f"**LOOCV PLS DA Accuracy:** {acc_loo:.3f}")
 
-report_dict_loo = classification_report(y_true_labels, y_pred_labels, output_dict=True)
-report_df_loo = pd.DataFrame(report_dict_loo).transpose().round(3)
-st.markdown("**Classification Report LOOCV:**")
-st.dataframe(report_df_loo, use_container_width=True)
-
+# Confusion matrix only
 conf_loo = confusion_matrix(y_true_labels, y_pred_labels, labels=label_encoder.classes_)
 st.markdown("**Confusion Matrix LOOCV:**")
 st.dataframe(pd.DataFrame(conf_loo, index=label_encoder.classes_, columns=label_encoder.classes_))
 
-pred_df = pd.DataFrame(pred_rows)
-st.markdown("**Per sample LOOCV predictions:**")
-st.dataframe(pred_df, use_container_width=True)
-st.download_button(
-    "Download LOOCV predictions CSV",
-    pred_df.to_csv(index=False).encode("utf-8"),
-    file_name="loocv_predictions.csv",
-    mime="text/csv"
-)
-
+# VIP scores for exploration
 st.subheader("7. VIP Scores from PLS on all data for exploration")
 pls_vip = PLSRegression(n_components=min(n_pls_vis, len(feature_cols)))
 pls_vip.fit(X_all_scaled, y_encoded)
