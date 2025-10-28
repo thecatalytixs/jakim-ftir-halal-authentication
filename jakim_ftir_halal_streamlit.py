@@ -74,64 +74,39 @@ label_encoder = LabelEncoder()
 y_encoded = label_encoder.fit_transform(y)
 
 # -----------------------------
-# 2. Scalable KMO
+# 2. Fast Approximate KMO
 # -----------------------------
-st.subheader("2. Kaiser Meyer Olkin (KMO) test (scalable for FTIR)")
+st.subheader("2. Approximate Kaiser Meyer Olkin (KMO) test")
 
-def kmo_numpy(X_feat: np.ndarray):
-    """Lightweight KMO using correlation and pseudo-inverse"""
-    Z = (X_feat - X_feat.mean(axis=0)) / X_feat.std(axis=0, ddof=0)
-    R = np.corrcoef(Z, rowvar=False)
-    eps = 1e-6
-    R += np.eye(R.shape[0]) * eps
-    invR = np.linalg.pinv(R)
-    d = np.sqrt(np.diag(invR))
-    P = -invR / np.outer(d, d)
-    np.fill_diagonal(P, 0.0)
+def fast_kmo(df_features, n_sample_features=300, random_state=42):
+    """Approximate KMO by sampling a subset of features."""
+    np.random.seed(random_state)
+    if df_features.shape[1] > n_sample_features:
+        cols = np.random.choice(df_features.columns, n_sample_features, replace=False)
+        df_features = df_features[cols]
 
-    R_off = R.copy()
-    np.fill_diagonal(R_off, 0.0)
-    r2_sum = np.sum(R_off**2)
-    p2_sum = np.sum(P**2)
-    kmo_overall = r2_sum / (r2_sum + p2_sum)
+    Z = (df_features - df_features.mean()) / df_features.std(ddof=0)
+    R = np.corrcoef(Z.values, rowvar=False)
 
-    r2_i = np.sum(R_off**2, axis=0)
-    p2_i = np.sum(P**2, axis=0)
-    msa = r2_i / (r2_i + p2_i)
-    return float(kmo_overall), pd.Series(msa)
+    np.fill_diagonal(R, 0.0)
+    r2_sum = np.sum(R**2)
+    kmo_overall = r2_sum / (r2_sum + (df_features.shape[1] * (df_features.shape[1]-1)))
 
-def sample_features_for_kmo(df_features, n_sample=1000, random_state=42):
-    """Randomly sample features for approximate KMO"""
-    if df_features.shape[1] <= n_sample:
-        return df_features
-    return df_features.sample(n=n_sample, axis=1, random_state=random_state)
+    return float(kmo_overall)
 
-# Decide computation mode
-n_features = X.shape[1]
-if n_features > 2000:
-    st.warning(f"Dataset has {n_features} features. Using **approximate KMO** (random 1000 features).")
-    X_for_kmo = sample_features_for_kmo(X[feature_cols], n_sample=1000)
-    with st.spinner("Computing approximate KMO…"):
-        kmo_value, msa_series = kmo_numpy(X_for_kmo.values)
-else:
-    X_for_kmo = X[feature_cols]
-    with st.spinner("Computing exact KMO…"):
-        kmo_value, msa_series = kmo_numpy(X_for_kmo.values)
+with st.spinner("Computing approximate KMO on a random subset of 300 features…"):
+    kmo_value = fast_kmo(X[feature_cols], n_sample_features=300)
 
 def kmo_note(k):
     if k >= 0.90: return "Marvelous"
     if k >= 0.80: return "Meritorious"
     if k >= 0.70: return "Middling"
     if k >= 0.60: return "Mediocre"
-    if k >= 0.50: return "Miserable"
+    if k >= 0.50: return "Acceptable"
     return "Unacceptable"
 
-st.markdown(f"**Overall KMO:** {kmo_value:.3f}  ·  _{kmo_note(kmo_value)}_")
-st.caption("KMO is computed on a subset for feasibility. PCA and PLS-DA always use **all features**.")
-
-msa_df = msa_series.reset_index()
-msa_df.columns = ["Variable", "MSA"]
-st.dataframe(msa_df.sort_values("MSA", ascending=False), use_container_width=True)
+st.markdown(f"**Approximate Overall KMO:** {kmo_value:.3f}  ·  _{kmo_note(kmo_value)}_")
+st.caption("KMO is computed on a random subset of 300 features for speed. PCA and PLS-DA still use **all features**.")
 
 # -----------------------------
 # 3. PCA
