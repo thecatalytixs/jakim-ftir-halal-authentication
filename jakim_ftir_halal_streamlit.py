@@ -16,7 +16,7 @@ plt.style.use('default')
 
 st.set_page_config(page_title="JAKIM FTIR Halal Authentication Platform", layout="wide")
 st.title("JAKIM FTIR Halal Authentication Platform")
-st.caption("Upload a CSV with columns SampleID Class and spectral variables such as 4000 to 400 cm⁻¹")
+st.caption("Upload a CSV with columns SampleID, Class and spectral variables such as 4000 to 400 cm⁻¹")
 
 uploaded_file = st.file_uploader("Upload your FTIR dataset CSV only", type=["csv"])
 
@@ -73,45 +73,63 @@ y = df["Class"].copy()
 label_encoder = LabelEncoder()
 y_encoded = label_encoder.fit_transform(y)
 
-# 2. KMO
-st.subheader("2. Kaiser Meyer Olkin test")
+# -----------------------------
+# 2. Scalable KMO
+# -----------------------------
+st.subheader("2. Kaiser Meyer Olkin (KMO) test (scalable for FTIR)")
 
-def kmo_from_dataframe(df_features: pd.DataFrame):
-    Xz = (df_features - df_features.mean(axis=0)) / df_features.std(axis=0, ddof=0)
-    R = np.corrcoef(Xz.values, rowvar=False)
+def reduce_features_for_kmo(df_features, max_features=5000):
+    """Reduce dimensionality so KMO can run without memory explosion"""
+    if df_features.shape[1] <= max_features:
+        return df_features
+    variances = df_features.var(axis=0)
+    top_vars = variances.sort_values(ascending=False).head(max_features).index
+    return df_features[top_vars]
+
+def kmo_numpy(X_feat: np.ndarray):
+    """Lightweight KMO using correlation and pseudo-inverse"""
+    Z = (X_feat - X_feat.mean(axis=0)) / X_feat.std(axis=0, ddof=0)
+    R = np.corrcoef(Z, rowvar=False)
     eps = 1e-6
-    R = R + np.eye(R.shape[0]) * eps
+    R += np.eye(R.shape[0]) * eps
     invR = np.linalg.pinv(R)
     d = np.sqrt(np.diag(invR))
     P = -invR / np.outer(d, d)
     np.fill_diagonal(P, 0.0)
+
     R_off = R.copy()
     np.fill_diagonal(R_off, 0.0)
     r2_sum = np.sum(R_off**2)
     p2_sum = np.sum(P**2)
     kmo_overall = r2_sum / (r2_sum + p2_sum)
+
     r2_i = np.sum(R_off**2, axis=0)
     p2_i = np.sum(P**2, axis=0)
     msa = r2_i / (r2_i + p2_i)
-    return float(kmo_overall), pd.Series(msa, index=df_features.columns, name="MSA")
+    return float(kmo_overall), pd.Series(msa)
 
-kmo_value, msa_series = kmo_from_dataframe(X[feature_cols])
+X_for_kmo = reduce_features_for_kmo(X[feature_cols], max_features=5000)
+st.caption(f"KMO is computed on {X_for_kmo.shape[1]} reduced features (from {X.shape[1]} original). PCA and PLS-DA use all features.")
+
+with st.spinner("Computing scalable KMO…"):
+    kmo_value, msa_series = kmo_numpy(X_for_kmo.values)
 
 def kmo_note(k):
     if k >= 0.90: return "Marvelous"
     if k >= 0.80: return "Meritorious"
     if k >= 0.70: return "Middling"
     if k >= 0.60: return "Mediocre"
-    if k >= 0.50: return "Acceptable"
+    if k >= 0.50: return "Miserable"
     return "Unacceptable"
 
 st.markdown(f"**Overall KMO:** {kmo_value:.3f}  ·  _{kmo_note(kmo_value)}_")
 msa_df = msa_series.reset_index()
 msa_df.columns = ["Variable", "MSA"]
 st.dataframe(msa_df.sort_values("MSA", ascending=False), use_container_width=True)
-st.caption("Rule of thumb KMO at least 0.50 indicates sampling adequacy for PCA or factor analysis. Variables with low MSA may be candidates for removal or checking.")
 
+# -----------------------------
 # 3. PCA
+# -----------------------------
 st.subheader("3. Principal Component Analysis PCA")
 n_pc = st.slider("Number of PCs", min_value=2, max_value=10, value=3, step=1)
 
@@ -135,8 +153,6 @@ if n_pc >= 3:
         text="SampleID" if show_labels else None,
         title="PCA Score Plot 3D"
     )
-    if show_labels:
-        fig.update_traces(textposition='top center')
 else:
     fig = px.scatter(
         pca_df,
@@ -147,7 +163,9 @@ else:
     )
 st.plotly_chart(fig, use_container_width=True)
 
+# -----------------------------
 # 4. PCA loadings
+# -----------------------------
 st.subheader("4. Variable Plot PCA Loadings")
 loadings = pd.DataFrame(pca.components_.T, columns=pca_cols, index=feature_cols)
 if n_pc >= 3:
@@ -162,7 +180,9 @@ else:
     )
 st.plotly_chart(fig_loadings, use_container_width=True)
 
+# -----------------------------
 # 5. PCA biplot
+# -----------------------------
 st.subheader("5. PCA Biplot")
 fig_biplot = go.Figure()
 for label in pca_df["Class"].unique():
@@ -182,40 +202,11 @@ for label in pca_df["Class"].unique():
             text=subset["SampleID"] if show_labels else None,
             name=label
         ))
-
-scale = 3.0
-for i in range(loadings.shape[0]):
-    if n_pc >= 3:
-        fig_biplot.add_trace(go.Scatter3d(
-            x=[0, loadings.iloc[i, 0] * scale],
-            y=[0, loadings.iloc[i, 1] * scale],
-            z=[0, loadings.iloc[i, 2] * scale],
-            mode='lines+text',
-            text=["", loadings.index[i]],
-            name=loadings.index[i],
-            line=dict(width=2)
-        ))
-    else:
-        fig_biplot.add_trace(go.Scatter(
-            x=[0, loadings.iloc[i, 0] * scale],
-            y=[0, loadings.iloc[i, 1] * scale],
-            mode='lines+text',
-            text=["", loadings.index[i]],
-            name=loadings.index[i],
-            line=dict(width=2)
-        ))
-
-fig_biplot.update_layout(
-    title="PCA Biplot",
-    scene=dict(
-        xaxis_title=pca_cols[0],
-        yaxis_title=pca_cols[1],
-        zaxis_title=pca_cols[2] if n_pc >= 3 else None
-    )
-)
 st.plotly_chart(fig_biplot, use_container_width=True)
 
+# -----------------------------
 # 6. PLS scores plot for visual inspection
+# -----------------------------
 st.subheader("6. PLS scores plot for visual inspection")
 n_pls_vis = st.slider("Number of PLS components for plotting", min_value=2, max_value=10, value=3, step=1)
 
@@ -242,7 +233,9 @@ else:
     )
 st.plotly_chart(fig_pls, use_container_width=True)
 
+# -----------------------------
 # 7. PLS DA classification with LOOCV simplified
+# -----------------------------
 st.subheader("7. PLS DA classification with Leave One Out Cross Validation")
 
 n_pls = st.slider("Number of PLS components for classification", min_value=2, max_value=10, value=3, step=1)
@@ -252,7 +245,6 @@ loo = LeaveOneOut()
 X_np = X.values
 y_np = y_encoded.copy()
 
-# initialise lists
 y_true = []
 y_pred = []
 
@@ -287,7 +279,9 @@ conf_loo = confusion_matrix(y_true_labels, y_pred_labels, labels=label_encoder.c
 st.markdown("**Confusion Matrix LOOCV:**")
 st.dataframe(pd.DataFrame(conf_loo, index=label_encoder.classes_, columns=label_encoder.classes_))
 
+# -----------------------------
 # 8. VIP scores for exploration
+# -----------------------------
 st.subheader("8. VIP Scores from PLS on all data for exploration")
 pls_vip = PLSRegression(n_components=min(n_pls_vis, len(feature_cols)))
 pls_vip.fit(X_all_scaled, y_encoded)
@@ -303,19 +297,10 @@ vip_df = pd.DataFrame({'Variable': feature_cols, 'VIP_Score': vip}).sort_values(
 fig_vip = px.bar(vip_df.head(20), x='Variable', y='VIP_Score', title='Top 20 VIP Scores exploratory')
 st.plotly_chart(fig_vip, use_container_width=True)
 st.dataframe(vip_df, use_container_width=True)
-st.download_button("Download VIP scores CSV", vip_df.to_csv(index=False).encode('utf-8'),
-                   file_name="vip_scores.csv", mime="text/csv")
 
-with st.expander("Notes and practice guidance"):
-    st.write(
-        """
-        PCA and the PLS scores plot above are visual only and are fitted on all samples
-        LOOCV classification scales and fits inside each fold to avoid leakage
-        VIP shown here is exploratory since it is fitted on all samples
-        """
-    )
-
+# -----------------------------
 # 9. External prediction using a final PLS DA model
+# -----------------------------
 st.subheader("9. Predict classes for an external testing dataset")
 st.caption("The model is trained on the entire dataset currently loaded above using the selected number of PLS components for classification")
 
@@ -383,9 +368,3 @@ if test_file is not None:
         file_name="external_predictions_plsda.csv",
         mime="text/csv"
     )
-
-    if len(extra_feats) > 0:
-        with st.expander("Note about extra columns in testing file"):
-            st.write(
-                f"The following columns were ignored because they are not part of the training feature set. Example columns {extra_feats[:10]}"
-            )
